@@ -92,8 +92,3 @@ rmarkdown::render("final_project.Rmd")
 - **CCA:** All four canonical correlations between cyclical and defensive sectors are highly significant ($p < 0.001$). The first canonical pair ($\hat{\rho}_1^* \approx 0.93$) captures the broad market factor; the second captures a risk-rotation effect.
 - **Sparse CCA:** Under $s$-sparsity assumptions, the SCCA estimator achieves the minimax-optimal rate $O(\sqrt{s \log p / n})$, enabling consistent estimation even when $p \gg n$.
 
----
-
-## Course
-
-Duke University — STA 832: Multivariate Analysis
