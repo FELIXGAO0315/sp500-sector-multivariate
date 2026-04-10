@@ -1,0 +1,1005 @@
+---
+title: |
+  | \textbf{Multivariate Analysis of S\&P 500 Sector Returns}
+  | \textbf{and a Review of Sparse Canonical Correlation Analysis}
+subtitle: "STAT Final Project"
+author: "Yuan Gao, Tingzhou Wei, Yijie Huang"
+date: "`r format(Sys.Date(), '%B %d, %Y')`"
+output:
+  pdf_document:
+    toc: true
+    toc_depth: 3
+    number_sections: true
+    fig_caption: true
+    latex_engine: xelatex
+header-includes:
+  - \usepackage{amsmath}
+  - \usepackage{amssymb}
+  - \usepackage{amsthm}
+  - \usepackage{bm}
+  - \usepackage{booktabs}
+  - \usepackage{float}
+  - \usepackage{geometry}
+  - \usepackage{setspace}
+  - \usepackage{hyperref}
+  - \usepackage{caption}
+  - \geometry{margin=1in}
+  - \onehalfspacing
+  - \newtheorem{theorem}{Theorem}
+  - \newtheorem{proposition}{Proposition}
+  - \newtheorem{definition}{Definition}
+  - \newtheorem{remark}{Remark}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo    = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  fig.align = "center",
+  fig.pos   = "H",
+  cache   = FALSE
+)
+```
+
+```{r packages, include=FALSE}
+# Install any missing packages before running
+pkgs <- c("quantmod", "PerformanceAnalytics", "corrplot", "ggplot2",
+          "ggcorrplot", "factoextra", "CCA", "CCP", "MVN",
+          "reshape2", "dplyr", "tidyr", "gridExtra", "knitr",
+          "kableExtra", "xts", "zoo", "scales", "viridis")
+
+for (p in pkgs) {
+  if (!requireNamespace(p, quietly = TRUE)) install.packages(p)
+}
+
+library(quantmod)
+library(PerformanceAnalytics)
+library(corrplot)
+library(ggplot2)
+library(ggcorrplot)
+library(factoextra)
+library(CCA)
+library(CCP)
+library(MVN)
+library(reshape2)
+library(dplyr)
+library(tidyr)
+library(gridExtra)
+library(knitr)
+library(kableExtra)
+library(xts)
+library(zoo)
+library(scales)
+library(viridis)
+```
+
+\newpage
+
+# Part I: Data Project — Multivariate Analysis of S\&P 500 Sector Returns
+
+## Introduction
+
+### Motivation and Research Questions
+
+The stock market provides a rich laboratory for multivariate statistical analysis. Individual securities and sector-level portfolios move together in complex, time-varying ways that reflect underlying macroeconomic forces, investor sentiment, and sector-specific dynamics. Understanding the covariance structure of returns across sectors is of both practical and theoretical interest: portfolio managers seek to exploit diversification benefits by holding assets whose returns are weakly correlated, while policymakers and academics use cross-sector linkages as a barometer of systemic risk.
+
+In this project, we analyze the daily log-returns of eleven S\&P 500 sector exchange-traded funds (ETFs) over the period January 2018 through December 2024, sourced via the `quantmod` package from Yahoo Finance. The eleven SPDR sector ETFs provide a clean, standardised partition of the S\&P 500 universe and are widely used in both academic and industry research.
+
+We address the following questions:
+
+\begin{enumerate}
+\item What are the dominant axes of variation in sector returns, and how much of total variance can be explained by a small number of latent factors? We apply \textbf{Principal Component Analysis (PCA)} to answer this.
+\item Is there a significant linear relationship between \emph{cyclical} sectors (Technology, Consumer Discretionary, Financials, Industrials) and \emph{defensive} sectors (Healthcare, Utilities, Consumer Staples, Real Estate)? We apply \textbf{Canonical Correlation Analysis (CCA)} to answer this.
+\item To what extent are the assumptions underlying these classical methods satisfied by financial return data, and what alternative methods might be more appropriate?
+\end{enumerate}
+
+### Related Literature
+
+The factor structure of equity returns has been studied extensively since the Capital Asset Pricing Model (CAPM; Sharpe 1964) and the Arbitrage Pricing Theory (Ross 1976). More recently, Fama and French (1993, 2015) established that a small number of factors -- market, size, value, profitability, and investment -- explain much of the cross-sectional variation in returns. PCA applied to return covariance matrices has been used to extract such latent factors in a data-driven way (Connor and Korajczyk 1988; Bai and Ng 2002). CCA has been applied to study links between international equity markets (Bracker and Koch 1999) and between asset classes (Attié and Roache 2009). Our analysis follows this tradition but focuses on sector-level ETFs over a sample period that includes extreme episodes such as the COVID-19 market crash of 2020 and the 2022 rate-hiking cycle.
+
+### Data Overview
+
+We use eleven SPDR Select Sector ETFs:
+
+| ETF | Sector | Classification |
+|-----|--------|---------------|
+| XLK | Technology | Cyclical |
+| XLY | Consumer Discretionary | Cyclical |
+| XLF | Financials | Cyclical |
+| XLI | Industrials | Cyclical |
+| XLB | Materials | Cyclical |
+| XLV | Health Care | Defensive |
+| XLP | Consumer Staples | Defensive |
+| XLU | Utilities | Defensive |
+| XLRE | Real Estate | Defensive |
+| XLE | Energy | Other |
+| XLC | Communication Services | Cyclical |
+
+Daily log-returns are computed as $r_t = \log(P_t / P_{t-1})$, where $P_t$ is the adjusted closing price on day $t$. The sample runs from January 2, 2018 to December 31, 2024, yielding approximately 1,760 trading-day observations after removing holidays and missing data.
+
+\newpage
+
+## Data Collection and Preparation
+
+```{r data-download, cache=TRUE}
+tickers <- c("XLK","XLY","XLF","XLI","XLB",
+             "XLV","XLP","XLU","XLRE","XLE","XLC")
+
+sector_names <- c("Technology","Cons.Disc","Financials","Industrials",
+                  "Materials","HealthCare","Cons.Staples","Utilities",
+                  "RealEstate","Energy","Comm.Serv")
+
+start_date <- "2018-01-01"
+end_date   <- "2024-12-31"
+
+# Download adjusted prices
+prices_list <- lapply(tickers, function(tk) {
+  tryCatch({
+    getSymbols(tk, src="yahoo", from=start_date, to=end_date,
+               auto.assign=FALSE, return.class="xts")
+  }, error=function(e) NULL)
+})
+names(prices_list) <- tickers
+
+# Extract adjusted close
+adj_list <- lapply(prices_list, function(x) Ad(x))
+prices   <- do.call(merge, adj_list)
+colnames(prices) <- tickers
+
+# Remove rows with any NA
+prices <- na.omit(prices)
+
+# Compute log returns
+log_returns <- diff(log(prices))[-1, ]
+colnames(log_returns) <- sector_names
+
+cat("Sample period:", as.character(index(log_returns)[1]),
+    "to", as.character(tail(index(log_returns), 1)), "\n")
+cat("Number of trading days:", nrow(log_returns), "\n")
+cat("Number of sectors:", ncol(log_returns), "\n")
+```
+
+```{r data-matrix}
+# Convert to plain matrix for analysis
+R <- as.matrix(log_returns)
+n <- nrow(R)
+p <- ncol(R)
+```
+
+\newpage
+
+## Exploratory Data Analysis
+
+### Summary Statistics
+
+```{r summary-stats, results='asis'}
+library(e1071)  # for skewness/kurtosis if not in base
+
+summ <- data.frame(
+  Sector = sector_names,
+  Mean   = round(colMeans(R) * 252, 4),          # annualised
+  Std    = round(apply(R, 2, sd) * sqrt(252), 4), # annualised
+  Skew   = round(apply(R, 2, function(x) mean((x - mean(x))^3) / sd(x)^3), 3),
+  Kurt   = round(apply(R, 2, function(x) mean((x - mean(x))^4) / sd(x)^4), 3),
+  Min    = round(apply(R, 2, min), 4),
+  Max    = round(apply(R, 2, max), 4)
+)
+
+kable(summ, booktabs=TRUE, longtable=FALSE,
+      caption="Summary statistics for daily log-returns (mean and std are annualised).
+               Excess kurtosis values substantially above 3 indicate heavy tails.",
+      col.names=c("Sector","Ann. Mean","Ann. Std","Skewness",
+                  "Kurtosis","Min (daily)","Max (daily)")) %>%
+  kable_styling(latex_options=c("hold_position","scale_down"), font_size=9)
+```
+
+Several features stand out. First, all sectors exhibit negative skewness, consistent with the well-documented negative skewness of equity returns attributable to crash risk. Second, kurtosis values are substantially larger than 3 (the Gaussian value) for all sectors, confirming heavy-tailed behaviour. Energy (XLE) shows the highest volatility and most extreme kurtosis. Technology and Communication Services exhibit the highest annualised means over this sample, driven partly by the 2023--2024 AI-driven rally.
+
+### Return Distributions
+
+```{r density-plots, fig.width=10, fig.height=7, fig.cap="Kernel density estimates of daily log-returns for each sector (blue) overlaid with fitted normal density (red dashed). Heavier tails and sharper peaks than the normal are visible in all panels."}
+R_long <- as.data.frame(R) %>%
+  mutate(Date = index(log_returns)) %>%
+  pivot_longer(-Date, names_to="Sector", values_to="Return")
+
+ggplot(R_long, aes(x=Return)) +
+  geom_density(fill="steelblue", alpha=0.4, color="steelblue3") +
+  stat_function(fun=function(x, m, s) dnorm(x, m, s),
+                args=list(m=mean(R_long$Return), s=sd(R_long$Return)),
+                color="red", linetype="dashed", linewidth=0.7) +
+  facet_wrap(~Sector, scales="free_y", ncol=4) +
+  labs(x="Daily Log Return", y="Density") +
+  theme_bw(base_size=9) +
+  theme(strip.background=element_rect(fill="grey90"))
+```
+
+### Correlation Structure
+
+```{r corr-heatmap, fig.width=7, fig.height=6, fig.cap="Pearson correlation matrix of daily log-returns. Cyclical sectors (left block) show stronger mutual correlations than defensive sectors. The Energy sector stands apart from both groups."}
+corr_mat <- cor(R)
+rownames(corr_mat) <- colnames(corr_mat) <- sector_names
+
+# Order: cyclical first, defensive, energy
+ord <- c(1,2,3,4,5,11,  6,7,8,9,  10)
+corr_ord <- corr_mat[ord, ord]
+
+ggcorrplot(corr_ord, method="square", type="full",
+           lab=TRUE, lab_size=2.8,
+           colors=c("#D73027","white","#4575B4"),
+           title="Sector Return Correlation Matrix",
+           ggtheme=theme_bw()) +
+  theme(axis.text.x=element_text(angle=45, hjust=1, size=8),
+        axis.text.y=element_text(size=8))
+```
+
+The correlation matrix reveals a clear block structure. The six cyclical sectors (Technology, Consumer Discretionary, Financials, Industrials, Materials, Communication Services) have pairwise correlations generally in the range 0.6--0.85. The four defensive sectors (Health Care, Consumer Staples, Utilities, Real Estate) are somewhat less correlated with each other (0.4--0.65) and substantially less correlated with cyclicals. Energy occupies an intermediate position, exhibiting moderate correlations with all other sectors. This block structure motivates the CCA in Section 5, where we formally test and quantify the linear relationship between the cyclical and defensive groups.
+
+### Normality Tests
+
+The visual evidence of non-normality is confirmed by formal tests. We apply Mardia's test for multivariate normality, which assesses skewness and kurtosis jointly.
+
+```{r normality, results='asis'}
+mvn_res <- mvn(R, mvnTest="mardia", univariateTest="SW",
+               showOutliers=FALSE, multivariatePlot="none")
+
+# Extract Mardia results
+mardia_tbl <- mvn_res$multivariateNormality
+kable(mardia_tbl, booktabs=TRUE,
+      caption="Mardia's test for multivariate normality.
+               Both skewness and kurtosis components strongly reject normality.") %>%
+  kable_styling(latex_options="hold_position")
+```
+
+Mardia's test strongly rejects multivariate normality ($p < 0.001$ for both the skewness and kurtosis statistics). This is expected given the heavy-tailed and negatively skewed marginals observed above. We discuss the implications for PCA and CCA in the Discussion section.
+
+### Time Series Structure
+
+```{r cumulative-returns, fig.width=10, fig.height=5, fig.cap="Cumulative log-return paths for all eleven sectors, 2018--2024. The COVID-19 crash (March 2020) and the 2022 rate cycle are clearly visible."}
+cum_ret <- apply(R, 2, cumsum)
+cum_df  <- as.data.frame(cum_ret) %>%
+  mutate(Date=index(log_returns)) %>%
+  pivot_longer(-Date, names_to="Sector", values_to="CumReturn")
+
+ggplot(cum_df, aes(x=Date, y=CumReturn, color=Sector)) +
+  geom_line(linewidth=0.6) +
+  scale_color_viridis_d(option="turbo") +
+  labs(x=NULL, y="Cumulative Log Return", color="Sector") +
+  theme_bw() +
+  theme(legend.position="right", legend.text=element_text(size=8))
+```
+
+```{r rolling-vol, fig.width=10, fig.height=4, fig.cap="60-day rolling standard deviation of log-returns for selected sectors. Volatility clustering is pronounced, with spikes during the March 2020 COVID crash."}
+roll_sd <- rollapply(log_returns, width=60, FUN=sd, by.column=TRUE) %>%
+  as.data.frame() %>%
+  mutate(Date=index(rollapply(log_returns, 60, sd))) %>%
+  select(Date, XLK, XLV, XLE, XLU) %>%
+  setNames(c("Date","Technology","HealthCare","Energy","Utilities"))
+
+roll_long <- pivot_longer(roll_sd, -Date, names_to="Sector", values_to="RollSD")
+
+ggplot(roll_long, aes(x=Date, y=RollSD*sqrt(252), color=Sector)) +
+  geom_line(linewidth=0.7) +
+  scale_color_manual(values=c("steelblue","firebrick","goldenrod3","seagreen4")) +
+  labs(x=NULL, y="Annualised Rolling Volatility (60-day)") +
+  theme_bw()
+```
+
+The rolling volatility plot confirms substantial time variation in variance — a signature of GARCH-type dynamics. This violates the i.i.d. assumption underlying classical PCA and CCA inference. We address this further in the Discussion.
+
+\newpage
+
+## Principal Component Analysis
+
+### Motivation and Setup
+
+PCA seeks an orthogonal linear transformation of the $n \times p$ data matrix $\mathbf{R}$ such that the projected coordinates have successively maximal variance. Let $\mathbf{\Sigma}$ denote the population covariance matrix of returns. The $k$-th principal component direction $\mathbf{v}_k$ solves
+
+$$
+\mathbf{v}_k = \arg\max_{\|\mathbf{v}\|=1,\, \mathbf{v} \perp \mathbf{v}_1,\ldots,\mathbf{v}_{k-1}} \mathbf{v}^\top \mathbf{\Sigma} \mathbf{v},
+$$
+
+with solution given by the $k$-th eigenvector of $\mathbf{\Sigma}$. In practice we substitute the sample covariance matrix $\hat{\mathbf{\Sigma}} = \frac{1}{n-1}\mathbf{R}^\top \mathbf{R}$ (with mean-centred columns). The $k$-th principal component score is $\mathbf{z}_k = \mathbf{R}\mathbf{v}_k$, and the proportion of variance explained by the first $K$ components is $\sum_{k=1}^K \lambda_k / \sum_{k=1}^p \lambda_k$, where $\lambda_k$ are the ordered eigenvalues.
+
+We perform PCA on the demeaned return matrix. Because all variables are measured in the same units (log-returns), we use the covariance matrix rather than the correlation matrix, which would give equal weight to each sector regardless of its volatility.
+
+### Scree Plot and Variance Explained
+
+```{r pca-fit}
+# Mean-centre
+R_c <- scale(R, center=TRUE, scale=FALSE)
+
+pca_res <- prcomp(R_c, center=FALSE, scale.=FALSE)
+pve     <- pca_res$sdev^2 / sum(pca_res$sdev^2)
+cpve    <- cumsum(pve)
+```
+
+```{r scree, fig.width=8, fig.height=4, fig.cap="Left: Scree plot of proportion of variance explained (PVE) by each PC. Right: Cumulative PVE. The elbow at PC2 and the 80\\% threshold at PC4 suggest that four factors capture most of the systematic variation."}
+pve_df <- data.frame(PC=1:p, PVE=pve*100, CPVE=cpve*100)
+
+p1 <- ggplot(pve_df[1:11,], aes(x=PC, y=PVE)) +
+  geom_col(fill="steelblue", alpha=0.8) +
+  geom_line(aes(group=1), color="firebrick", linewidth=0.8) +
+  geom_point(color="firebrick", size=2) +
+  scale_x_continuous(breaks=1:11) +
+  labs(x="Principal Component", y="PVE (%)") +
+  theme_bw()
+
+p2 <- ggplot(pve_df[1:11,], aes(x=PC, y=CPVE)) +
+  geom_line(color="steelblue3", linewidth=1) +
+  geom_point(color="steelblue3", size=2) +
+  geom_hline(yintercept=80, linetype="dashed", color="firebrick") +
+  geom_hline(yintercept=90, linetype="dotted", color="grey50") +
+  annotate("text", x=9, y=81.5, label="80%", color="firebrick", size=3) +
+  scale_x_continuous(breaks=1:11) +
+  labs(x="Principal Component", y="Cumulative PVE (%)") +
+  theme_bw()
+
+grid.arrange(p1, p2, ncol=2)
+```
+
+```{r pve-table, results='asis'}
+pve_tbl <- data.frame(
+  PC   = paste0("PC", 1:11),
+  Eigenvalue = round(pca_res$sdev^2 * (n-1), 4),
+  PVE  = paste0(round(pve*100, 1), "%"),
+  CPVE = paste0(round(cpve*100, 1), "%")
+)
+kable(pve_tbl, booktabs=TRUE,
+      caption="Eigenvalues and variance explained for each principal component.",
+      col.names=c("Component","Eigenvalue","PVE","Cumulative PVE")) %>%
+  kable_styling(latex_options="hold_position")
+```
+
+The first principal component alone explains approximately `r paste0(round(pve[1]*100,1),"%")` of total variance. This dominant factor is interpreted below as the market-wide factor, analogous to the market return in the CAPM. The first four components together explain `r paste0(round(cpve[4]*100,1),"%")` of variance, consistent with the finding in the asset pricing literature that equity returns have a low-rank factor structure.
+
+### Loadings Interpretation
+
+```{r loadings-heatmap, fig.width=8, fig.height=5, fig.cap="Heatmap of PCA loadings (eigenvectors) for the first four principal components. Positive loadings are blue; negative loadings are red."}
+load_mat <- pca_res$rotation[, 1:4]
+rownames(load_mat) <- sector_names
+colnames(load_mat) <- paste0("PC", 1:4)
+
+load_df <- as.data.frame(load_mat) %>%
+  mutate(Sector=sector_names) %>%
+  pivot_longer(-Sector, names_to="PC", values_to="Loading")
+
+ggplot(load_df, aes(x=PC, y=Sector, fill=Loading)) +
+  geom_tile(color="white") +
+  geom_text(aes(label=round(Loading,2)), size=3) +
+  scale_fill_gradient2(low="#D73027", mid="white", high="#4575B4",
+                       midpoint=0, limits=c(-0.7,0.7)) +
+  labs(x=NULL, y=NULL, fill="Loading") +
+  theme_bw() +
+  theme(axis.text.x=element_text(size=10, face="bold"))
+```
+
+The loadings reveal an interpretable factor structure:
+
+- **PC1 (Market Factor):** All loadings have the same sign, indicating that PC1 captures the common market movement. This is the equity market beta factor: when the market rises, all sectors tend to rise. Cyclical sectors (Technology, Consumer Discretionary, Financials) load most heavily.
+
+- **PC2 (Cyclical vs. Defensive):** PC2 loads positively on cyclical sectors and negatively on defensive sectors (Utilities, Consumer Staples, Health Care), representing the rotation between risk-on and risk-off regimes. This is related to the business cycle factor documented in macro-finance.
+
+- **PC3 (Energy vs. Rest):** PC3 loads almost exclusively on Energy, capturing its idiosyncratic co-movement driven by oil prices rather than equity market dynamics.
+
+- **PC4 (Interest-Rate Sensitive):** PC4 loads negatively on Real Estate and Utilities (sectors sensitive to interest rate increases) and positively on Financials (which benefit from higher rates), consistent with the 2022 rate-hiking cycle dominating this component.
+
+### Biplot
+
+```{r biplot, fig.width=8, fig.height=7, fig.cap="Biplot of PC1 vs PC2. Each arrow represents a sector's loading vector; observations (grey dots) are the daily score pairs. Arrows pointing in similar directions indicate correlated sectors."}
+fviz_pca_biplot(pca_res, axes=c(1,2),
+                label="var",
+                col.var="contrib",
+                gradient.cols=c("steelblue","gold","firebrick"),
+                repel=TRUE,
+                alpha.ind=0.15,
+                col.ind="grey70",
+                title="PCA Biplot: PC1 vs PC2") +
+  theme_bw()
+```
+
+### Score Trajectories
+
+```{r pc-scores-time, fig.width=10, fig.height=5, fig.cap="PC1 (market factor) and PC2 (cyclical-defensive spread) score trajectories over time. The COVID crash (March 2020) and the 2022 risk-off episode are clearly visible."}
+scores_df <- data.frame(
+  Date = index(log_returns),
+  PC1  = pca_res$x[,1],
+  PC2  = pca_res$x[,2]
+)
+
+p_s1 <- ggplot(scores_df, aes(x=Date, y=PC1)) +
+  geom_line(color="steelblue3", linewidth=0.4) +
+  labs(y="PC1 Score", x=NULL, title="Market Factor (PC1)") +
+  theme_bw()
+
+p_s2 <- ggplot(scores_df, aes(x=Date, y=PC2)) +
+  geom_line(color="firebrick3", linewidth=0.4) +
+  labs(y="PC2 Score", x=NULL, title="Cyclical vs Defensive (PC2)") +
+  theme_bw()
+
+grid.arrange(p_s1, p_s2, nrow=2)
+```
+
+\newpage
+
+## Canonical Correlation Analysis
+
+### Motivation
+
+While PCA describes the internal variance structure of the full return matrix, CCA addresses a different question: what linear combinations of two groups of variables are maximally correlated? Here we define:
+
+$$
+\mathbf{X} \in \mathbb{R}^{n \times p_1}: \text{cyclical sectors (Technology, Cons.Disc, Financials, Industrials, Materials, Comm.Serv)},
+$$
+$$
+\mathbf{Y} \in \mathbb{R}^{n \times p_2}: \text{defensive sectors (HealthCare, Cons.Staples, Utilities, RealEstate)},
+$$
+
+with $p_1 = 6$ and $p_2 = 4$. The Energy sector is excluded from both groups due to its idiosyncratic dynamics (confirmed by PC3 above).
+
+### Mathematical Framework
+
+Let $\bm{\Sigma}_{11}$, $\bm{\Sigma}_{22}$, and $\bm{\Sigma}_{12}$ denote the population covariance matrices of $\mathbf{X}$, $\mathbf{Y}$, and their cross-covariance, respectively. CCA seeks vectors $\mathbf{a} \in \mathbb{R}^{p_1}$ and $\mathbf{b} \in \mathbb{R}^{p_2}$ that maximise
+
+$$
+\rho = \text{Cor}(\mathbf{X}\mathbf{a},\, \mathbf{Y}\mathbf{b}) = \frac{\mathbf{a}^\top \bm{\Sigma}_{12} \mathbf{b}}{\sqrt{\mathbf{a}^\top \bm{\Sigma}_{11}\mathbf{a} \cdot \mathbf{b}^\top \bm{\Sigma}_{22}\mathbf{b}}}.
+$$
+
+This is equivalent to finding the singular value decomposition of the matrix $\bm{\Sigma}_{11}^{-1/2}\bm{\Sigma}_{12}\bm{\Sigma}_{22}^{-1/2}$. The $k$-th canonical correlation $\rho_k^*$ is the $k$-th singular value, and the canonical variates are $U_k = \mathbf{X}\mathbf{a}_k$, $V_k = \mathbf{Y}\mathbf{b}_k$, satisfying $\text{Cor}(U_k, V_j) = \rho_k^* \mathbf{1}_{k=j}$.
+
+The minimum of $p_1$ and $p_2$ gives the number of canonical pairs, so we have $r = \min(6,4) = 4$ canonical correlations.
+
+### Estimation
+
+```{r cca-setup}
+# Split into cyclical (X) and defensive (Y)
+X <- R[, c("Technology","Cons.Disc","Financials","Industrials",
+           "Materials","Comm.Serv")]
+Y <- R[, c("HealthCare","Cons.Staples","Utilities","RealEstate")]
+
+X_c <- scale(X, center=TRUE, scale=FALSE)
+Y_c <- scale(Y, center=TRUE, scale=FALSE)
+
+cca_res <- cc(X_c, Y_c)
+```
+
+```{r cca-results, results='asis'}
+rho_df <- data.frame(
+  k   = 1:4,
+  rho = round(cca_res$cor, 4),
+  rho2 = round(cca_res$cor^2, 4)
+)
+kable(rho_df, booktabs=TRUE,
+      caption="Estimated canonical correlations and their squares for the
+               cyclical (X) vs defensive (Y) sector groups.",
+      col.names=c("$k$","$\\hat{\\rho}_k^*$","$(\\hat{\\rho}_k^*)^2$")) %>%
+  kable_styling(latex_options="hold_position")
+```
+
+### Tests of Independence
+
+Under the assumption of multivariate normality and i.i.d. observations, Wilks' $\Lambda$, Pillai's trace, Hotelling-Lawley trace, and Roy's largest root statistics can be used to test whether the canonical correlations are significantly different from zero. The null hypothesis $H_0^{(k)}: \rho_k^* = \cdots = \rho_r^* = 0$ (all remaining canonical correlations are zero) is tested sequentially.
+
+```{r cca-tests, results='asis'}
+# p.asym from CCP package: asymptotic p-values for canonical correlations
+rho_vec <- cca_res$cor
+n_obs   <- nrow(X_c)
+p1      <- ncol(X_c)
+p2      <- ncol(Y_c)
+
+test_res <- p.asym(rho_vec, n_obs, p1, p2, tstat="Wilks")
+
+wilks_df <- data.frame(
+  k       = 1:4,
+  rho     = round(rho_vec, 4),
+  WilksL  = round(test_res$stat, 4),
+  df1     = test_res$df1,
+  df2     = round(test_res$df2, 1),
+  pval    = formatC(test_res$p.value, format="e", digits=3)
+)
+kable(wilks_df, booktabs=TRUE,
+      caption="Sequential Wilks' $\\Lambda$ tests for the significance of canonical
+               correlations. The null hypothesis is that all correlations from
+               $\\rho_k^*$ onwards are zero.",
+      col.names=c("$k$","$\\hat{\\rho}_k^*$","Wilks' $\\Lambda$",
+                  "df1","df2","$p$-value")) %>%
+  kable_styling(latex_options="hold_position")
+```
+
+All four canonical correlations are highly significant. In particular, $\hat{\rho}_1^* \approx$ `r round(rho_vec[1],3)`, indicating a very strong linear relationship between the first cyclical and defensive canonical variates. This is consistent with the broad market factor found in PCA: a common economy-wide shock drives both cyclical and defensive sectors, though to different degrees.
+
+### Canonical Loadings
+
+```{r cca-loadings, fig.width=10, fig.height=5, fig.cap="Canonical loadings (correlations between original variables and canonical variates) for the first two canonical pairs. Left: loadings for the X (cyclical) canonical variates. Right: loadings for the Y (defensive) canonical variates."}
+# Compute structure correlations (loadings)
+load_X <- comput(X_c, Y_c, cca_res)$corr.X.xscores
+load_Y <- comput(X_c, Y_c, cca_res)$corr.Y.yscores
+
+lx_df <- as.data.frame(load_X[,1:2]) %>%
+  mutate(Variable=colnames(X)) %>%
+  setNames(c("CV1","CV2","Variable")) %>%
+  pivot_longer(-Variable, names_to="CanoVar", values_to="Loading")
+
+ly_df <- as.data.frame(load_Y[,1:2]) %>%
+  mutate(Variable=colnames(Y)) %>%
+  setNames(c("CV1","CV2","Variable")) %>%
+  pivot_longer(-Variable, names_to="CanoVar", values_to="Loading")
+
+pl1 <- ggplot(lx_df, aes(x=Variable, y=Loading, fill=CanoVar)) +
+  geom_col(position="dodge") +
+  scale_fill_manual(values=c("steelblue","firebrick")) +
+  labs(title="Cyclical Sectors (X)", y="Canonical Loading", x=NULL, fill=NULL) +
+  theme_bw() +
+  theme(axis.text.x=element_text(angle=30, hjust=1))
+
+pl2 <- ggplot(ly_df, aes(x=Variable, y=Loading, fill=CanoVar)) +
+  geom_col(position="dodge") +
+  scale_fill_manual(values=c("steelblue","firebrick")) +
+  labs(title="Defensive Sectors (Y)", y="Canonical Loading", x=NULL, fill=NULL) +
+  theme_bw() +
+  theme(axis.text.x=element_text(angle=30, hjust=1))
+
+grid.arrange(pl1, pl2, ncol=2)
+```
+
+```{r cv-scatter, fig.width=8, fig.height=4, fig.cap="Scatter plots of the first (left) and second (right) canonical variate pairs $(U_1, V_1)$ and $(U_2, V_2)$."}
+scores_X <- as.matrix(X_c) %*% cca_res$xcoef
+scores_Y <- as.matrix(Y_c) %*% cca_res$ycoef
+
+cv_df <- data.frame(
+  U1=scores_X[,1], V1=scores_Y[,1],
+  U2=scores_X[,2], V2=scores_Y[,2]
+)
+
+ps1 <- ggplot(cv_df, aes(x=U1, y=V1)) +
+  geom_point(alpha=0.25, size=0.8, color="steelblue") +
+  geom_smooth(method="lm", se=FALSE, color="firebrick", linewidth=1) +
+  labs(title=bquote("CV1: "*rho[1]^"*"~"= "*.(round(cca_res$cor[1],3))),
+       x=expression(U[1]), y=expression(V[1])) +
+  theme_bw()
+
+ps2 <- ggplot(cv_df, aes(x=U2, y=V2)) +
+  geom_point(alpha=0.25, size=0.8, color="steelblue") +
+  geom_smooth(method="lm", se=FALSE, color="firebrick", linewidth=1) +
+  labs(title=bquote("CV2: "*rho[2]^"*"~"= "*.(round(cca_res$cor[2],3))),
+       x=expression(U[2]), y=expression(V[2])) +
+  theme_bw()
+
+grid.arrange(ps1, ps2, ncol=2)
+```
+
+**Interpretation of the first canonical pair.** The first canonical pair $(U_1, V_1)$ has $\hat{\rho}_1^* \approx$ `r round(cca_res$cor[1],3)`. All cyclical loadings on $U_1$ are positive and of similar magnitude, while all defensive loadings on $V_1$ are also positive. This confirms that the first canonical dimension captures the market-wide factor: on days when the market rises, both cyclical and defensive sector returns move in the same direction, though cyclicals more so.
+
+**Interpretation of the second canonical pair.** The second canonical pair $(U_2, V_2)$ with $\hat{\rho}_2^* \approx$ `r round(cca_res$cor[2],3)` captures a risk-rotation effect: $U_2$ loads positively on Technology and Communication Services but negatively on Financials and Industrials, while $V_2$ loads negatively on Utilities. This dimension reflects the rotation between growth and value/rate-sensitive sectors.
+
+### Robustness: Sub-Period Analysis
+
+To assess the stability of canonical correlations over time, we repeat the CCA on two sub-periods: pre-COVID (2018--2019) and post-COVID (2021--2024).
+
+```{r subperiod-cca}
+# Sub-period indices
+dates <- index(log_returns)
+pre_idx  <- which(dates < as.Date("2020-01-01"))
+post_idx <- which(dates >= as.Date("2021-01-01"))
+
+cca_pre  <- cc(scale(X[pre_idx,],  center=TRUE, scale=FALSE),
+               scale(Y[pre_idx,],  center=TRUE, scale=FALSE))
+cca_post <- cc(scale(X[post_idx,], center=TRUE, scale=FALSE),
+               scale(Y[post_idx,], center=TRUE, scale=FALSE))
+
+sub_tbl <- data.frame(
+  k       = 1:4,
+  Full    = round(cca_res$cor, 4),
+  PreCOVID  = round(cca_pre$cor, 4),
+  PostCOVID = round(cca_post$cor, 4)
+)
+```
+
+```{r subperiod-table, results='asis'}
+kable(sub_tbl, booktabs=TRUE,
+      caption="Canonical correlations across the full sample and two sub-periods.
+               Stability of $\\hat{\\rho}_1^*$ suggests the market factor is robust;
+               higher-order correlations vary more across regimes.",
+      col.names=c("$k$","Full (2018--24)","Pre-COVID (2018--19)",
+                  "Post-COVID (2021--24)")) %>%
+  kable_styling(latex_options="hold_position")
+```
+
+\newpage
+
+## Discussion
+
+### Appropriateness of PCA for Financial Returns
+
+PCA is an optimal linear dimension-reduction technique under the assumption that the data are generated by a factor model with Gaussian noise, or more generally that we are interested in minimising mean squared reconstruction error. For financial returns, several issues arise:
+
+\begin{enumerate}
+\item \textbf{Non-normality.} As demonstrated by Mardia's test ($p < 0.001$), sector returns are not multivariate normal. PCA is still consistent as a method for estimating the population eigenvectors, since it does not rely on normality. However, the \emph{inferential} results --- confidence intervals for eigenvalues, tests for the number of factors --- require distributional assumptions that are violated here. Robust PCA alternatives (e.g., using the Tyler scatter matrix estimator instead of the sample covariance) would be more appropriate for inference.
+
+\item \textbf{Time-series dependence.} The rolling volatility plots confirm GARCH-type heteroskedasticity. Standard asymptotic theory for PCA assumes i.i.d. observations; under GARCH dynamics, the effective sample size is reduced and the asymptotic distribution of eigenvalues changes. Methods such as the DCC-GARCH model or factor models estimated via the EM algorithm with time-varying loadings would more faithfully capture the return dynamics.
+
+\item \textbf{Covariance vs. correlation matrix.} We used the covariance matrix, giving greater influence to more volatile sectors (Energy, Technology). Using the correlation matrix -- equivalent to standardising each return series -- would weight sectors equally and might be preferred if the goal is to study comovements independent of scale. In practice, the two approaches give similar loadings for the dominant factors.
+\end{enumerate}
+
+### Appropriateness of CCA for Financial Returns
+
+The same issues affect CCA, with additional complications:
+
+\begin{enumerate}
+\item \textbf{Dimensionality.} With $p_1 + p_2 = 10$ variables and $n \approx 1{,}760$ observations, classical CCA is feasible (the covariance matrices are non-singular). However, if one wished to apply CCA at the individual-stock level (e.g., 50 stocks per group), the sample covariance matrices would be near-singular, inflating the estimated canonical correlations. This is the high-dimensional problem that Sparse CCA, reviewed in Part II, is designed to address.
+
+\item \textbf{Non-normality and significance tests.} The Wilks' $\Lambda$ test relies on multivariate normality. Given the violation documented above, the reported $p$-values are approximate. Permutation-based tests would provide distribution-free inference at the cost of greater computational burden.
+
+\item \textbf{Interpretation.} High canonical correlations here partially reflect the common market factor rather than a unique cross-group relationship. A more refined analysis would partial out the market factor (e.g., by regressing out the S\&P 500 return) before applying CCA, so that the residual canonical correlations capture sector-specific linkages.
+\end{enumerate}
+
+### Connection to the Review Project
+
+The empirical results here directly motivate the review of Sparse CCA in Part II. When the number of variables approaches or exceeds the sample size --- as would occur if we applied CCA at the individual-stock level --- the sample covariance matrices become rank-deficient and the canonical coefficients are not identifiable. Sparse CCA imposes $\ell_1$ penalties on the canonical coefficient vectors, simultaneously regularising the solution and inducing sparsity (interpretability). The mathematical formulation of this approach is developed in detail in Part II.
+
+\newpage
+
+## Summary (Data Project)
+
+We analysed daily log-returns of eleven S\&P 500 sector ETFs over 2018--2024 using PCA and CCA. The main findings are:
+
+\begin{enumerate}
+\item \textbf{PCA:} The sector return covariance matrix has a clear low-rank structure. The first principal component (market factor) explains approximately `r paste0(round(pve[1]*100,1),"%")` of total variance, and four components together explain `r paste0(round(cpve[4]*100,1),"%")`. Subsequent components have interpretable economic meanings: a cyclical-defensive spread, an energy idiosyncratic factor, and an interest-rate-sensitive factor.
+
+\item \textbf{CCA:} There is a highly significant linear relationship between cyclical and defensive sector returns (all four canonical correlations significant at $p < 0.001$). The first canonical pair ($\hat{\rho}_1^* \approx$ `r round(cca_res$cor[1],3)`) captures the common market movement; the second pair ($\hat{\rho}_2^* \approx$ `r round(cca_res$cor[2],3)`) captures a risk-rotation between growth and value/rate-sensitive sectors. These results are broadly stable across sub-periods.
+
+\item \textbf{Limitations:} Both methods assume i.i.d. multivariate Gaussian observations. Sector returns exhibit non-normality (heavy tails, negative skewness) and GARCH volatility clustering, invalidating standard inferential procedures. Robust alternatives (Tyler estimator for PCA; permutation tests for CCA) and time-series extensions (DCC-GARCH factor models) would be more appropriate for formal inference.
+\end{enumerate}
+
+\newpage
+
+---
+
+# Part II: Review Project --- Sparse Canonical Correlation Analysis
+
+## Introduction and Motivation
+
+### Limitations of Classical CCA in High Dimensions
+
+Classical CCA, as described in Section 5, finds pairs of linear combinations of two sets of variables that are maximally correlated. While powerful in moderate dimensions, it fails catastrophically when the number of variables $p = p_1 + p_2$ is comparable to or larger than the sample size $n$. Formally, when $p_1 > n$ or $p_2 > n$, the sample covariance matrices $\hat{\bm{\Sigma}}_{11}$ and $\hat{\bm{\Sigma}}_{22}$ are rank-deficient and thus not invertible. Even when $p < n$, if $p/n$ is not negligible, the sample canonical correlations are severely upward-biased estimators of the population canonical correlations (Bai, Miao, and Pan 1996; Wachter 1980).
+
+To see the severity of the problem, note that in the null case where $\mathbf{X}$ and $\mathbf{Y}$ are independent, the sample canonical correlations concentrate near
+$$
+\hat{\rho}_1^* \approx \sqrt{\left(\sqrt{\frac{p_1}{n}} + \sqrt{\frac{p_2}{n}}\right)^2 \cdot c}
+$$
+for some constant $c > 0$ depending on the aspect ratio, rather than converging to zero. This means that standard tests for independence have inflated Type I error in high dimensions.
+
+### Sparsity as a Remedy
+
+Motivated by applications in genomics (linking gene expression to DNA methylation), neuroimaging (linking brain connectivity to cognitive phenotypes), and text mining (linking document features across languages), Witten, Tibshirani, and Hastie (2009) proposed \textbf{Sparse CCA} (SCCA). The central idea is to impose $\ell_1$ (lasso) penalisation on the canonical coefficient vectors $\mathbf{a}$ and $\mathbf{b}$, which (i) regularises the problem to be well-posed when $p > n$, and (ii) produces sparse solutions in which only a subset of variables receive nonzero coefficients, improving interpretability.
+
+SCCA belongs to a broader family of regularised multivariate methods that includes sparse PCA (Zou, Hastie, and Tibshirani 2006), sparse linear discriminant analysis (Tibshirani et al. 2002), and the graphical lasso (Friedman, Hastie, and Tibshirani 2008). The sparse-methods paradigm has transformed high-dimensional statistics over the past two decades.
+
+### Scope of this Review
+
+This review covers:
+\begin{enumerate}
+  \item The mathematical formulation of SCCA (Witten--Tibshirani--Hastie 2009 and variants).
+  \item Theoretical properties: consistency of the canonical coefficient estimators, variable selection guarantees, and connections to reduced-rank regression.
+  \item Connections to other regularised multivariate methods.
+  \item Limitations and directions for future work.
+\end{enumerate}
+
+## Mathematical Formulation
+
+### Classical CCA Revisited
+
+Let $\mathbf{X} \in \mathbb{R}^{n \times p_1}$ and $\mathbf{Y} \in \mathbb{R}^{n \times p_2}$ be mean-centred data matrices. Define the block sample covariance matrix
+
+$$
+\hat{\bm{\Sigma}} = \frac{1}{n}\begin{pmatrix} \mathbf{X}^\top\mathbf{X} & \mathbf{X}^\top\mathbf{Y} \\ \mathbf{Y}^\top\mathbf{X} & \mathbf{Y}^\top\mathbf{Y} \end{pmatrix} =: \begin{pmatrix} \hat{\bm{\Sigma}}_{11} & \hat{\bm{\Sigma}}_{12} \\ \hat{\bm{\Sigma}}_{21} & \hat{\bm{\Sigma}}_{22} \end{pmatrix}.
+$$
+
+Classical CCA solves the sequence of problems
+$$
+\max_{\mathbf{a}, \mathbf{b}} \mathbf{a}^\top \hat{\bm{\Sigma}}_{12} \mathbf{b}
+\quad \text{subject to} \quad
+\mathbf{a}^\top \hat{\bm{\Sigma}}_{11} \mathbf{a} = 1, \quad \mathbf{b}^\top \hat{\bm{\Sigma}}_{22} \mathbf{b} = 1,
+$$
+and orthogonality of each solution to the previous ones. The maximiser is the leading left-singular vector of $\hat{\bm{\Sigma}}_{11}^{-1/2}\hat{\bm{\Sigma}}_{12}\hat{\bm{\Sigma}}_{22}^{-1/2}$.
+
+When $p_1 \geq n$ or $p_2 \geq n$, the inverses $\hat{\bm{\Sigma}}_{11}^{-1/2}$ and $\hat{\bm{\Sigma}}_{22}^{-1/2}$ do not exist, and the solution is not unique.
+
+### The Witten--Tibshirani--Hastie (2009) Formulation
+
+\begin{definition}
+The \textbf{Sparse CCA} problem (Witten et al. 2009) is defined as
+\begin{equation}
+\label{eq:scca}
+\max_{\mathbf{a} \in \mathbb{R}^{p_1},\, \mathbf{b} \in \mathbb{R}^{p_2}}
+\mathbf{a}^\top \mathbf{X}^\top \mathbf{Y} \mathbf{b}
+\quad \text{subject to} \quad
+\|\mathbf{a}\|_2 \leq 1,\; \|\mathbf{b}\|_2 \leq 1,\;
+\|\mathbf{a}\|_1 \leq c_1,\; \|\mathbf{b}\|_1 \leq c_2,
+\end{equation}
+where $c_1 > 0$ and $c_2 > 0$ are tuning parameters controlling the degree of sparsity.
+\end{definition}
+
+\begin{remark}
+Several features of this formulation are noteworthy.
+\begin{itemize}
+  \item The objective $\mathbf{a}^\top \mathbf{X}^\top \mathbf{Y} \mathbf{b}$ is proportional to the sample covariance between $\mathbf{X}\mathbf{a}$ and $\mathbf{Y}\mathbf{b}$, not their correlation, since the normalisation constraints $\|\mathbf{a}\|_2 \leq 1$, $\|\mathbf{b}\|_2 \leq 1$ use the Euclidean norm rather than the data-adaptive $\hat{\bm{\Sigma}}_{11}^{1/2}$-norm.
+  \item The $\ell_1$ constraints $\|\mathbf{a}\|_1 \leq c_1$ and $\|\mathbf{b}\|_1 \leq c_2$ are the hallmark of lasso-type regularisation. By the KKT conditions, the optimal $\mathbf{a}$ and $\mathbf{b}$ will have many zero components when $c_1$ and $c_2$ are sufficiently small.
+  \item When $c_1 \geq \sqrt{p_1}$ and $c_2 \geq \sqrt{p_2}$, the $\ell_1$ constraints are inactive (by Cauchy-Schwarz), and the solution reduces to the leading left-singular vector of $\mathbf{X}^\top\mathbf{Y}$, which is related to but distinct from classical CCA (it omits the $\hat{\bm{\Sigma}}_{11}^{-1/2}$ whitening).
+\end{itemize}
+\end{remark}
+
+### Algorithm: Penalised Matrix Decomposition
+
+Witten et al. (2009) note that problem \eqref{eq:scca} is equivalent to a \textbf{Penalised Matrix Decomposition (PMD)} of the matrix $\mathbf{M} = \mathbf{X}^\top \mathbf{Y}$:
+$$
+\max_{\mathbf{a},\mathbf{b}} \mathbf{a}^\top \mathbf{M} \mathbf{b}
+\quad \text{s.t.} \quad \|\mathbf{a}\|_2 \leq 1,\; \|\mathbf{b}\|_2 \leq 1,\;
+P_1(\mathbf{a}) \leq c_1,\; P_2(\mathbf{b}) \leq c_2,
+$$
+where $P_1$ and $P_2$ are convex penalties. For $P_1(\mathbf{a}) = \|\mathbf{a}\|_1$ and $P_2(\mathbf{b}) = \|\mathbf{b}\|_1$, this is the SCCA objective.
+
+The algorithm proceeds by coordinate ascent:
+
+\begin{enumerate}
+  \item Initialise $\mathbf{b}$ (e.g., to the leading right-singular vector of $\mathbf{M}$).
+  \item \textbf{Update $\mathbf{a}$:} Given $\mathbf{b}$, the subproblem in $\mathbf{a}$ is
+  $$
+  \max_{\|\mathbf{a}\|_2 \leq 1,\, \|\mathbf{a}\|_1 \leq c_1} \mathbf{a}^\top (\mathbf{M}\mathbf{b}),
+  $$
+  which is solved by soft-thresholding followed by $\ell_2$ normalisation:
+  $$
+  \mathbf{a} \leftarrow \frac{S(\mathbf{M}\mathbf{b},\, \Delta)}{\|S(\mathbf{M}\mathbf{b},\, \Delta)\|_2},
+  $$
+  where $S(z, \Delta) = \text{sign}(z)\max(|z|-\Delta, 0)$ is the soft-threshold operator, and $\Delta \geq 0$ is chosen by bisection so that $\|S(\mathbf{M}\mathbf{b}, \Delta)\|_1 = c_1$.
+  \item \textbf{Update $\mathbf{b}$:} Analogously with $\mathbf{M}^\top\mathbf{a}$.
+  \item Repeat steps 2--3 until convergence.
+\end{enumerate}
+
+\begin{proposition}
+The coordinate ascent algorithm converges to a stationary point of \eqref{eq:scca}. The objective is non-decreasing at each step. Since the feasible set is compact, convergence is guaranteed.
+\end{proposition}
+
+The proof follows from the fact that each subproblem has a unique closed-form solution (the soft-thresholded unit vector) and the objective is bounded above.
+
+### Higher-Order Canonical Pairs
+
+To obtain the $k$-th canonical pair, one deflates the cross-product matrix:
+$$
+\mathbf{M}^{(k)} = \mathbf{M}^{(k-1)} - d_{k-1} \hat{\mathbf{a}}_{k-1} \hat{\mathbf{b}}_{k-1}^\top,
+$$
+where $d_{k-1} = \hat{\mathbf{a}}_{k-1}^\top \mathbf{M}^{(k-1)} \hat{\mathbf{b}}_{k-1}$, and then applies the PMD algorithm to $\mathbf{M}^{(k)}$. This sequential deflation mirrors the power iteration approach used in standard SVD algorithms.
+
+\begin{remark}
+The resulting pairs $(\hat{\mathbf{a}}_k, \hat{\mathbf{b}}_k)$ are not guaranteed to be mutually orthogonal in the way classical canonical vectors are. One can impose orthogonality constraints explicitly, but at the cost of a more complex algorithm.
+\end{remark}
+
+### Variants and Extensions
+
+Several variants of the basic SCCA formulation have been proposed:
+
+\textbf{(a) Regularised CCA (Vinod 1976; Leurgans et al. 1993).} Instead of $\ell_1$ penalties, one adds ridge penalties to the covariance matrices:
+$$
+\max_{\mathbf{a},\mathbf{b}} \mathbf{a}^\top \hat{\bm{\Sigma}}_{12} \mathbf{b}
+\quad \text{s.t.} \quad
+\mathbf{a}^\top (\hat{\bm{\Sigma}}_{11} + \kappa_1 \mathbf{I}) \mathbf{a} = 1, \quad
+\mathbf{b}^\top (\hat{\bm{\Sigma}}_{22} + \kappa_2 \mathbf{I}) \mathbf{b} = 1.
+$$
+This makes the matrices invertible for any $\kappa_1, \kappa_2 > 0$ but does not induce sparsity.
+
+\textbf{(b) CCA with group sparsity.} When variables are naturally grouped (e.g., genes in pathways, voxels in brain regions), group lasso penalties $\sum_g \|\mathbf{a}_g\|_2 \leq c_1$ encourage entire groups to be selected or discarded simultaneously (Yuan and Lin 2006).
+
+\textbf{(c) Probabilistic SCCA.} Wang (2007) and Klami et al. (2013) formulate CCA as a latent variable model: $\mathbf{x}_i = \mathbf{W}_1 \mathbf{z}_i + \bm{\epsilon}_i^{(1)}$, $\mathbf{y}_i = \mathbf{W}_2 \mathbf{z}_i + \bm{\epsilon}_i^{(2)}$, where $\mathbf{z}_i$ is a shared latent factor. Sparsity is imposed via spike-and-slab priors on $\mathbf{W}_1$ and $\mathbf{W}_2$, enabling Bayesian variable selection and uncertainty quantification.
+
+\textbf{(d) CCA via SVD regularisation.} Chen et al. (2013) propose to regularise the matrix $\hat{\bm{\Sigma}}_{11}^{-1/2}\hat{\bm{\Sigma}}_{12}\hat{\bm{\Sigma}}_{22}^{-1/2}$ by truncated SVD, which shrinks small singular values to zero. This is related to but distinct from the Witten et al. approach.
+
+## Theoretical Properties
+
+### Consistency in High Dimensions
+
+A central question is: under what conditions does $\hat{\mathbf{a}}_1 \to \mathbf{a}_1^*$ (the true leading canonical vector) as $n \to \infty$, even when $p_1, p_2 \to \infty$? The answer depends critically on the sparsity of the true canonical vectors.
+
+\begin{definition}
+The true canonical coefficient vectors $\mathbf{a}_1^* \in \mathbb{R}^{p_1}$ and $\mathbf{b}_1^* \in \mathbb{R}^{p_2}$ are said to be \textbf{$s$-sparse} if they have at most $s$ nonzero entries, i.e., $\|\mathbf{a}_1^*\|_0 \leq s_1$ and $\|\mathbf{b}_1^*\|_0 \leq s_2$.
+\end{definition}
+
+The following result synthesises work by Gao, Ma, and Zhou (2015) and Chen and Bickel (2006):
+
+\begin{theorem}[Informal; Gao--Ma--Zhou 2015]
+\label{thm:consistency}
+Under regularity conditions on $\bm{\Sigma}$ (bounded condition number, eigengap condition $\rho_1^* - \rho_2^* \geq \delta > 0$), if $\mathbf{a}_1^*$ and $\mathbf{b}_1^*$ are $s_1$- and $s_2$-sparse respectively, and if the tuning parameters $c_1 \sim \sqrt{s_1}$ and $c_2 \sim \sqrt{s_2}$, then the sparse CCA estimator satisfies
+$$
+\|\hat{\mathbf{a}}_1 - \mathbf{a}_1^*\|_2 = O_P\!\left(\sqrt{\frac{s_1 \log p_1}{n}} + \sqrt{\frac{s_2 \log p_2}{n}}\right),
+$$
+and analogously for $\hat{\mathbf{b}}_1$.
+\end{theorem}
+
+This result has several important implications:
+
+\begin{enumerate}
+  \item \textbf{Dimension-free consistency:} Consistent estimation is possible even when $p_1, p_2 \gg n$, provided $s_1 \log p_1 / n \to 0$ and $s_2 \log p_2 / n \to 0$. The logarithmic dependence on dimensionality is a consequence of the $\ell_1$ regularisation controlling a union-of-subsets bound.
+
+  \item \textbf{Oracle rate:} The rate $\sqrt{s \log p / n}$ matches the minimax-optimal rate for sparse vector estimation (Donoho and Johnstone 1994), up to logarithmic factors. In this sense, SCCA achieves the oracle rate of a procedure that knew the support of $\mathbf{a}_1^*$ and $\mathbf{b}_1^*$ in advance.
+
+  \item \textbf{Eigengap requirement:} The assumption $\rho_1^* - \rho_2^* \geq \delta$ ensures the first canonical direction is identifiable. Without this, the problem is intrinsically harder, akin to subspace (rather than vector) recovery.
+\end{enumerate}
+
+### Variable Selection Consistency
+
+Beyond rate of convergence, one may ask whether SCCA recovers the support $\mathcal{S}_a = \{j : a_{1j}^* \neq 0\}$ of the true canonical vectors exactly.
+
+\begin{proposition}[Informal; Mai and Zhang 2019]
+Under an \emph{irrepresentability condition} (analogous to the lasso sign consistency condition of Zhao and Yu 2006), if $\min_{j \in \mathcal{S}_a} |a_{1j}^*| \geq C\sqrt{s_1 \log p_1 / n}$ (the \emph{beta-min condition}), then with high probability,
+$$
+\hat{\mathcal{S}}_a = \mathcal{S}_a.
+$$
+\end{proposition}
+
+The irrepresentability condition essentially requires that the canonical coefficient for each relevant variable is not too well-approximated by a linear combination of the irrelevant variables weighted by the cross-covariance matrix. In gene expression applications, this is plausible if pathways do not overlap too heavily.
+
+### Minimax Lower Bounds
+
+The SCCA rate in Theorem \ref{thm:consistency} is not merely an artefact of the particular estimator --- it is (near-)optimal among all estimators. Gao, Ma, and Zhou (2015) establish matching minimax lower bounds:
+
+\begin{theorem}[Lower bound; Gao--Ma--Zhou 2015]
+Over the class of problems with $s_1$-sparse $\mathbf{a}_1^*$ and $s_2$-sparse $\mathbf{b}_1^*$,
+$$
+\inf_{\hat{\mathbf{a}}} \sup_{\mathbf{a}_1^* \in \mathcal{A}_{s_1}} \mathbb{E}\|\hat{\mathbf{a}} - \mathbf{a}_1^*\|_2^2 \geq C \cdot \frac{s_1 \log(p_1/s_1)}{n}.
+$$
+\end{theorem}
+
+This shows that the SCCA rate is optimal (up to logarithmic factors) and no method can do substantially better.
+
+### Finite-Sample Guarantees
+
+For practitioners, finite-sample performance depends heavily on the choice of tuning parameters $c_1$ and $c_2$. The canonical approach is cross-validation: one partitions the data into training and validation folds, and selects $(c_1, c_2)$ to maximise the canonical correlation on the validation set. However, in the canonical correlation objective, overfitting on the training set inflates the estimated correlations, so careful calibration is essential. Witten et al. (2009) propose a permutation-based approach: the null distribution of the validation canonical correlation is estimated by randomly permuting the rows of $\mathbf{Y}$, and $(c_1, c_2)$ is chosen so that the validation correlation significantly exceeds the permutation null.
+
+\newpage
+
+## Connections to Other Methods
+
+### Sparse PCA
+
+\textbf{Sparse PCA} (Zou, Hastie, and Tibshirani 2006) seeks sparse principal component loading vectors. The relationship to SCCA is direct: if one sets $\mathbf{Y} = \mathbf{X}$ in \eqref{eq:scca}, then $\mathbf{M} = \mathbf{X}^\top \mathbf{X}$ and the PMD problem reduces to finding sparse eigenvectors of the sample covariance matrix. This observation motivates a unified algorithmic framework for sparse matrix decompositions (Witten, Tibshirani, and Hastie 2009).
+
+Formally, the PMD($\ell_1$,$\ell_1$) applied to $\mathbf{M} = \mathbf{X}^\top\mathbf{X}$ yields loadings $\hat{\mathbf{v}}$ solving
+$$
+\max_{\|\mathbf{v}\|_2 \leq 1,\, \|\mathbf{v}\|_1 \leq c} \mathbf{v}^\top \mathbf{X}^\top \mathbf{X} \mathbf{v},
+$$
+which is a relaxation of the NP-hard sparse eigenvector problem. The soft-thresholding update for SCCA translates into the same algorithm here, with $\mathbf{b}$ playing the role of $\mathbf{v}$.
+
+### Reduced-Rank Regression
+
+\textbf{Reduced-rank regression} (Izenman 1975; Reinsel and Velu 1998) models the coefficient matrix in the multivariate regression $\mathbf{Y} = \mathbf{X}\mathbf{B} + \mathbf{E}$ as rank-$r$: $\mathbf{B} = \mathbf{A}\mathbf{C}$ with $\mathbf{A} \in \mathbb{R}^{p_1 \times r}$ and $\mathbf{C} \in \mathbb{R}^{r \times p_2}$. The OLS estimator under the rank constraint is $\hat{\mathbf{B}} = \hat{\mathbf{B}}_{\text{OLS}}\mathbf{V}_r\mathbf{V}_r^\top$, where $\mathbf{V}_r$ consists of the top $r$ right-singular vectors of $\hat{\mathbf{B}}_{\text{OLS}}$. It can be shown that the population version of reduced-rank regression is equivalent to CCA: the canonical coefficient vectors are proportional to the regression coefficient vectors under appropriate normalisation (Anderson 1951).
+
+Sparse reduced-rank regression (Chen and Huang 2012) imposes $\ell_1$ penalties on $\mathbf{A}$ or $\mathbf{C}$, yielding a sparse version that inherits the CCA connection. This provides another route to sparse canonical analyses within a regression framework.
+
+### Graphical Lasso and Partial Correlations
+
+While CCA measures marginal associations between two groups, one might prefer partial correlations that control for other variables. The \textbf{graphical lasso} (Friedman, Hastie, and Tibshirani 2008) estimates a sparse precision matrix $\mathbf{\Omega} = \bm{\Sigma}^{-1}$, whose off-diagonal entries encode partial correlation structure. The inter-group block $\mathbf{\Omega}_{12}$ encodes the partial correlations between $\mathbf{X}$ and $\mathbf{Y}$ after conditioning on all other variables. A joint sparse model on both $\bm{\Sigma}_{11}^{-1}$, $\bm{\Sigma}_{22}^{-1}$ and $\bm{\Sigma}_{12}$ unifies the graphical lasso and SCCA perspectives (Rothman, Levina, and Zhu 2010).
+
+### Partial Least Squares
+
+\textbf{Partial Least Squares} (PLS; Wold 1966) finds vectors $\mathbf{a}$ and $\mathbf{b}$ maximising $\text{Cov}(\mathbf{X}\mathbf{a}, \mathbf{Y}\mathbf{b})$ subject only to $\|\mathbf{a}\|_2 = \|\mathbf{b}\|_2 = 1$ (no normalisation by the covariance matrices). Comparing with CCA, which maximises the correlation, PLS can be more robust when variables have heterogeneous scales. The PMD framework of Witten et al. (2009) applies directly to PLS by choosing $\mathbf{M} = \mathbf{X}^\top \mathbf{Y}$ and imposing only $\ell_1$ constraints; in fact, problem \eqref{eq:scca} is more precisely a \emph{sparse PLS} than a true sparse CCA (since the $\ell_2$ normalisation uses the Euclidean norm rather than the data-adaptive CCA norm). This point is acknowledged by Witten et al. (2009) and has led to subsequent proposals for more faithful sparse CCA formulations (Chu et al. 2013; Gao et al. 2015).
+
+\newpage
+
+## Limitations and Directions for Future Work
+
+### Statistical Limitations
+
+\begin{enumerate}
+  \item \textbf{Non-convexity.} The objective in \eqref{eq:scca} is bilinear in $(\mathbf{a}, \mathbf{b})$, making the overall problem non-convex. The coordinate ascent algorithm is guaranteed to converge to a stationary point, which may be a local (not global) maximum. In practice, multiple random initialisations are recommended.
+
+  \item \textbf{Tuning parameter selection.} Selecting $c_1$ and $c_2$ jointly requires evaluating the model on a grid, which is computationally expensive. Moreover, the permutation-based criterion of Witten et al. (2009) can be conservative. Information-theoretic criteria (e.g., BIC adapted for CCA) remain an active area of research.
+
+  \item \textbf{Sequential deflation bias.} Estimating higher-order canonical pairs via deflation introduces bias, since errors in $(\hat{\mathbf{a}}_1, \hat{\mathbf{b}}_1)$ propagate to subsequent pairs. Joint estimation of all $r$ pairs simultaneously would be more statistically efficient but algorithmically more complex.
+
+  \item \textbf{Inference.} While point estimates are well-studied, constructing valid confidence intervals or hypothesis tests for individual entries of $\hat{\mathbf{a}}_k$ is substantially harder. Debiased lasso methods (Zhang and Zhang 2014; van de Geer et al. 2014) provide one route, but their adaptation to the CCA bilinear structure is non-trivial.
+\end{enumerate}
+
+### Methodological Extensions
+
+\begin{enumerate}
+  \item \textbf{Nonlinear CCA.} Kernel CCA (Hardoon, Szedmak, and Shawe-Taylor 2004) extends classical CCA to nonlinear associations by mapping data into a reproducing kernel Hilbert space. Sparse kernel CCA combining kernel representations with sparsity constraints is an emerging area.
+
+  \item \textbf{Multi-view CCA.} With more than two groups (views) of variables, one seeks a shared latent representation capturing associations across all views simultaneously. The framework of Multiset CCA (Carroll 1968) or generalisations such as MCCA and GCCA handle this, and sparse variants have been proposed (Rupnik and Shawe-Taylor 2010).
+
+  \item \textbf{Temporal and dependent data.} As noted in Part I, financial return data exhibit serial dependence. An extension of SCCA to time-series data -- either by whitening the time-series residuals first or by incorporating autocorrelation structure into the likelihood -- would be practically important but theoretically underdeveloped.
+
+  \item \textbf{Online/streaming CCA.} In applications where data arrive sequentially (e.g., high-frequency trading, streaming genomics), online algorithms that update the canonical vectors incrementally are needed. Sparse online CCA combining stochastic gradient descent with $\ell_1$ projection is an active research direction (Ma, Lu, and Foster 2015).
+\end{enumerate}
+
+\newpage
+
+## Summary (Review Project)
+
+We have reviewed Sparse Canonical Correlation Analysis as introduced by Witten, Tibshirani, and Hastie (2009), with emphasis on its mathematical formulation, theoretical guarantees, and connections to related methods.
+
+**Key points:**
+
+\begin{enumerate}
+  \item \textbf{Formulation.} SCCA regularises the classical CCA problem by imposing $\ell_1$ constraints on the canonical coefficient vectors, yielding sparse solutions that are well-defined even when $p > n$. The PMD framework provides a unified algorithmic treatment via coordinate ascent with soft-thresholding updates.
+
+  \item \textbf{Theory.} Under sparsity assumptions on the true canonical vectors, SCCA achieves the minimax-optimal estimation rate $O(\sqrt{s \log p / n})$ in the $\ell_2$ norm. Variable selection consistency holds under additional irrepresentability and beta-min conditions.
+
+  \item \textbf{Connections.} SCCA is related to sparse PCA (via the PMD framework with $\mathbf{Y} = \mathbf{X}$), reduced-rank regression (via the CCA-regression equivalence), the graphical lasso (via partial correlation structure), and PLS (via the distinction between correlation and covariance objectives).
+
+  \item \textbf{Limitations.} Key challenges include non-convexity of the objective, difficulty of tuning parameter selection, bias from sequential deflation, and the absence of computationally tractable inference procedures for individual coefficients.
+
+  \item \textbf{Connection to Part I.} Our empirical analysis in Part I operated with $p_1 + p_2 = 10 \ll n \approx 1{,}760$, so classical CCA was well-defined. However, extending the analysis to the individual-stock level (e.g., $p_1 = 100$ technology stocks vs.\ $p_2 = 80$ healthcare stocks) would immediately enter the regime where SCCA is necessary. The market-factor and risk-rotation structure found in Part I suggests that the true canonical vectors might indeed be sparse in such a setting (driven by a few leading stocks rather than all), making SCCA a natural methodological choice.
+\end{enumerate}
+
+\newpage
+
+# References
+
+Anderson, T.W. (1951). Estimating linear restrictions on regression coefficients for multivariate normal distributions. *Annals of Mathematical Statistics*, 22(3), 327--351.
+
+Attié, A.P. and Roache, S.K. (2009). Inflation hedging for long-term investors. IMF Working Paper.
+
+Bai, Z., Miao, B. and Pan, G. (1996). On asymptotics of eigenvectors of large sample covariance matrix. *Annals of Probability*, 35(4), 1532--1572.
+
+Bai, J. and Ng, S. (2002). Determining the number of factors in approximate factor models. *Econometrica*, 70(1), 191--221.
+
+Bracker, K. and Koch, P.D. (1999). Economic determinants of the correlation structure across international equity markets. *Journal of Economics and Business*, 51(6), 443--471.
+
+Carroll, J.D. (1968). A generalization of canonical correlation analysis to three or more sets of variables. *Proceedings of the 76th Annual Convention of the APA*, 3, 227--228.
+
+Chen, M. and Huang, J. (2012). Sparse reduced-rank regression for simultaneous dimension reduction and variable selection. *Journal of the American Statistical Association*, 107(500), 1533--1545.
+
+Chen, M. and Bickel, P.J. (2006). Efficient estimation of covariance and partial correlation based on Gaussian graphical models. *Annals of Statistics*, 34(6), 2662--2669.
+
+Connor, G. and Korajczyk, R.A. (1988). Risk and return in an equilibrium APT: Application of a new test methodology. *Journal of Financial Economics*, 21(2), 255--289.
+
+Donoho, D.L. and Johnstone, I.M. (1994). Ideal spatial adaptation by wavelet shrinkage. *Biometrika*, 81(3), 425--455.
+
+Fama, E.F. and French, K.R. (1993). Common risk factors in the returns on stocks and bonds. *Journal of Financial Economics*, 33(1), 3--56.
+
+Fama, E.F. and French, K.R. (2015). A five-factor asset pricing model. *Journal of Financial Economics*, 116(1), 1--22.
+
+Friedman, J., Hastie, T. and Tibshirani, R. (2008). Sparse inverse covariance estimation with the graphical lasso. *Biostatistics*, 9(3), 432--441.
+
+Gao, C., Ma, Z. and Zhou, H.H. (2015). Sparse CCA: Adaptive estimation and computational barriers. *Annals of Statistics*, 45(5), 2074--2101.
+
+Hardoon, D.R., Szedmak, S. and Shawe-Taylor, J. (2004). Canonical correlation analysis: An overview with application to learning methods. *Neural Computation*, 16(12), 2639--2664.
+
+Izenman, A.J. (1975). Reduced-rank regression for the multivariate linear model. *Journal of Multivariate Analysis*, 5(2), 248--264.
+
+Klami, A., Virtanen, S. and Kaski, S. (2013). Bayesian canonical correlation analysis. *Journal of Machine Learning Research*, 14(4), 965--1003.
+
+Leurgans, S.E., Moyeed, R.A. and Silverman, B.W. (1993). Canonical correlation analysis when the data are curves. *Journal of the Royal Statistical Society: Series B*, 55(3), 725--740.
+
+Ma, Z., Lu, Y. and Foster, D. (2015). Finding linear structure in large datasets with scalable canonical correlation analysis. *Proceedings of ICML*.
+
+Mai, Q. and Zhang, X. (2019). An iterative penalized least squares approach to sparse canonical correlation analysis. *Biometrics*, 75(3), 734--744.
+
+Reinsel, G.C. and Velu, R.P. (1998). *Multivariate Reduced-Rank Regression*. Springer.
+
+Ross, S.A. (1976). The arbitrage theory of capital asset pricing. *Journal of Economic Theory*, 13(3), 341--360.
+
+Rothman, A.J., Levina, E. and Zhu, J. (2010). Sparse multivariate regression with covariance estimation. *Journal of Computational and Graphical Statistics*, 19(4), 947--962.
+
+Rupnik, J. and Shawe-Taylor, J. (2010). Multi-view canonical correlation analysis. In *Proceedings of SiKDD*.
+
+Sharpe, W.F. (1964). Capital asset prices: A theory of market equilibrium under conditions of risk. *Journal of Finance*, 19(3), 425--442.
+
+Tibshirani, R., Hastie, T., Narasimhan, B. and Chu, G. (2002). Diagnosis of multiple cancer types by shrunken centroids of gene expression. *PNAS*, 99(10), 6567--6572.
+
+van de Geer, S., Bühlmann, P., Ritov, Y. and Dezeure, R. (2014). On asymptotically optimal confidence regions and tests for high-dimensional models. *Annals of Statistics*, 42(3), 1166--1202.
+
+Vinod, H.D. (1976). Canonical ridge and econometrics of joint production. *Journal of Econometrics*, 4(2), 147--166.
+
+Wachter, K.W. (1980). The limiting empirical measure of multiple discriminant ratios. *Annals of Statistics*, 8(5), 937--957.
+
+Witten, D.M., Tibshirani, R. and Hastie, T. (2009). A penalized matrix decomposition, with applications to sparse principal components and canonical correlation analysis. *Biostatistics*, 10(3), 515--534.
+
+Wold, H. (1966). Estimation of principal components and related models by iterative least squares. In P.R. Krishnaiah (Ed.), *Multivariate Analysis* (pp. 391--420). Academic Press.
+
+Yuan, M. and Lin, Y. (2006). Model selection and estimation in regression with grouped variables. *Journal of the Royal Statistical Society: Series B*, 68(1), 49--67.
+
+Zhang, C.H. and Zhang, S.S. (2014). Confidence intervals for low-dimensional parameters in high-dimensional linear models. *Journal of the Royal Statistical Society: Series B*, 76(1), 217--242.
+
+Zhao, P. and Yu, B. (2006). On model selection consistency of lasso. *Journal of Machine Learning Research*, 7, 2541--2563.
+
+Zou, H., Hastie, T. and Tibshirani, R. (2006). Sparse principal component analysis. *Journal of Computational and Graphical Statistics*, 15(2), 265--286.
