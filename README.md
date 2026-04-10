@@ -2,8 +2,6 @@
 
 Multivariate analysis of S&P 500 sector returns using PCA and CCA, with a theoretical review of Sparse CCA via the Penalized Matrix Decomposition framework. Duke STA 832 Final Project.
 
-**Authors:** Yuan Gao, Tingzhou Wei, Yijie Huang
-
 ---
 
 ## Overview
