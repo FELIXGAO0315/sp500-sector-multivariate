@@ -43,9 +43,11 @@ knitr::opts_chunk$set(
 ```
 
 ```{r packages, include=FALSE}
-# Install any missing packages before running
+# Install any missing packages before running.
+# Note: We intentionally avoid the `MVN` package (frequent API breakages)
+# and `e1071` (we compute skew/kurt manually).
 pkgs <- c("quantmod", "PerformanceAnalytics", "corrplot", "ggplot2",
-          "ggcorrplot", "factoextra", "CCA", "CCP", "MVN",
+          "ggcorrplot", "CCA", "CCP",
           "reshape2", "dplyr", "tidyr", "gridExtra", "knitr",
           "kableExtra", "xts", "zoo", "scales", "viridis")
 
@@ -58,10 +60,8 @@ library(PerformanceAnalytics)
 library(corrplot)
 library(ggplot2)
 library(ggcorrplot)
-library(factoextra)
 library(CCA)
 library(CCP)
-library(MVN)
 library(reshape2)
 library(dplyr)
 library(tidyr)
@@ -122,6 +122,20 @@ Daily log-returns are computed as $r_t = \log(P_t / P_{t-1})$, where $P_t$ is th
 
 ## Data Collection and Preparation
 
+Reproducibility is a recurring challenge when the primary data source is a free
+public API such as Yahoo Finance: connection errors, rate-limiting, and silent
+schema changes are common. To make this document reproducible we adopt a
+**three-tier strategy**:
+
+1. **Local cache (fastest):** if the file `sector_returns_cache.rds` exists in
+   the working directory, we load it directly and skip any downloads.
+2. **Yahoo Finance (first-time setup):** otherwise we download each ETF
+   individually using `quantmod::getSymbols()` inside a `tryCatch()` with
+   retries; successful downloads are merged, cleaned, and saved both as an
+   `.rds` file (fast binary) and a `.csv` file (human-readable backup).
+3. **Failure diagnostics:** if any ticker still fails after retries, the code
+   reports which one(s) so the user can manually supply a CSV.
+
 ```{r data-download, cache=TRUE}
 tickers <- c("XLK","XLY","XLF","XLI","XLB",
              "XLV","XLP","XLU","XLRE","XLE","XLC")
@@ -133,31 +147,62 @@ sector_names <- c("Technology","Cons.Disc","Financials","Industrials",
 start_date <- "2018-01-01"
 end_date   <- "2024-12-31"
 
-# Download adjusted prices
-prices_list <- lapply(tickers, function(tk) {
-  tryCatch({
-    getSymbols(tk, src="yahoo", from=start_date, to=end_date,
-               auto.assign=FALSE, return.class="xts")
-  }, error=function(e) NULL)
-})
-names(prices_list) <- tickers
+cache_rds <- "sector_returns_cache.rds"
+cache_csv <- "sector_returns_cache.csv"
 
-# Extract adjusted close
-adj_list <- lapply(prices_list, function(x) Ad(x))
-prices   <- do.call(merge, adj_list)
-colnames(prices) <- tickers
+# ---- Tier 1: try local cache ------------------------------------------------
+if (file.exists(cache_rds)) {
+  log_returns <- readRDS(cache_rds)
+  message("Loaded returns from local cache: ", cache_rds)
+} else {
 
-# Remove rows with any NA
-prices <- na.omit(prices)
+  # ---- Tier 2: download from Yahoo Finance, one ticker at a time ----------
+  fetch_one <- function(tk, tries = 3, pause = 1) {
+    for (k in seq_len(tries)) {
+      res <- tryCatch(
+        getSymbols(tk, src = "yahoo",
+                   from = start_date, to = end_date,
+                   auto.assign = FALSE, return.class = "xts"),
+        error = function(e) e
+      )
+      if (!inherits(res, "error") && !is.null(res)) return(res)
+      Sys.sleep(pause * k)   # simple exponential back-off
+    }
+    NULL
+  }
 
-# Compute log returns
-log_returns <- diff(log(prices))[-1, ]
-colnames(log_returns) <- sector_names
+  prices_list <- lapply(tickers, fetch_one)
+  names(prices_list) <- tickers
+
+  failed <- tickers[sapply(prices_list, is.null)]
+  if (length(failed) > 0) {
+    stop("Failed to download the following ticker(s) after retries: ",
+         paste(failed, collapse = ", "),
+         "\nPlease supply a CSV manually (see instructions in the .Rmd).")
+  }
+
+  # Extract adjusted close for every ticker
+  adj_list <- lapply(prices_list, Ad)
+  prices   <- do.call(merge, adj_list)
+  colnames(prices) <- tickers
+  prices <- na.omit(prices)
+
+  # Daily log-returns
+  log_returns <- diff(log(prices))[-1, ]
+  colnames(log_returns) <- sector_names
+
+  # ---- Persist to disk so later knits are fast and offline-friendly -------
+  saveRDS(log_returns, cache_rds)
+  write.csv(data.frame(Date = index(log_returns),
+                       coredata(log_returns)),
+            cache_csv, row.names = FALSE)
+  message("Saved cache to ", cache_rds, " and ", cache_csv)
+}
 
 cat("Sample period:", as.character(index(log_returns)[1]),
     "to", as.character(tail(index(log_returns), 1)), "\n")
 cat("Number of trading days:", nrow(log_returns), "\n")
-cat("Number of sectors:", ncol(log_returns), "\n")
+cat("Number of sectors:",      ncol(log_returns), "\n")
 ```
 
 ```{r data-matrix}
@@ -167,6 +212,13 @@ n <- nrow(R)
 p <- ncol(R)
 ```
 
+> **Note on the cache:** The first time you knit this document, an internet
+> connection is required so that data can be pulled from Yahoo Finance.
+> Thereafter the files `sector_returns_cache.rds` and `sector_returns_cache.csv`
+> sit in your project folder and are used automatically — the document will
+> knit offline. If you ever wish to refresh the data, simply delete those two
+> files before knitting.
+
 \newpage
 
 ## Exploratory Data Analysis
@@ -174,11 +226,9 @@ p <- ncol(R)
 ### Summary Statistics
 
 ```{r summary-stats, results='asis'}
-library(e1071)  # for skewness/kurtosis if not in base
-
 summ <- data.frame(
   Sector = sector_names,
-  Mean   = round(colMeans(R) * 252, 4),          # annualised
+  Mean   = round(colMeans(R) * 252, 4),           # annualised
   Std    = round(apply(R, 2, sd) * sqrt(252), 4), # annualised
   Skew   = round(apply(R, 2, function(x) mean((x - mean(x))^3) / sd(x)^3), 3),
   Kurt   = round(apply(R, 2, function(x) mean((x - mean(x))^4) / sd(x)^4), 3),
@@ -186,69 +236,111 @@ summ <- data.frame(
   Max    = round(apply(R, 2, max), 4)
 )
 
-kable(summ, booktabs=TRUE, longtable=FALSE,
-      caption="Summary statistics for daily log-returns (mean and std are annualised).
-               Excess kurtosis values substantially above 3 indicate heavy tails.",
-      col.names=c("Sector","Ann. Mean","Ann. Std","Skewness",
-                  "Kurtosis","Min (daily)","Max (daily)")) %>%
-  kable_styling(latex_options=c("hold_position","scale_down"), font_size=9)
+kable(summ, booktabs = TRUE, longtable = FALSE,
+      caption = "Summary statistics for daily log-returns (mean and std are annualised).
+                 Kurtosis values substantially above 3 indicate heavy tails.",
+      col.names = c("Sector","Ann. Mean","Ann. Std","Skewness",
+                    "Kurtosis","Min (daily)","Max (daily)")) %>%
+  kable_styling(latex_options = c("hold_position","scale_down"), font_size = 9)
 ```
 
 Several features stand out. First, all sectors exhibit negative skewness, consistent with the well-documented negative skewness of equity returns attributable to crash risk. Second, kurtosis values are substantially larger than 3 (the Gaussian value) for all sectors, confirming heavy-tailed behaviour. Energy (XLE) shows the highest volatility and most extreme kurtosis. Technology and Communication Services exhibit the highest annualised means over this sample, driven partly by the 2023--2024 AI-driven rally.
 
 ### Return Distributions
 
-```{r density-plots, fig.width=10, fig.height=7, fig.cap="Kernel density estimates of daily log-returns for each sector (blue) overlaid with fitted normal density (red dashed). Heavier tails and sharper peaks than the normal are visible in all panels."}
+```{r density-plots, fig.width=10, fig.height=7, fig.cap="Kernel density estimates of daily log-returns for each sector (blue) overlaid with the fitted \\emph{sector-specific} normal density (red dashed). Heavier tails and sharper peaks than the normal are visible in all panels."}
 R_long <- as.data.frame(R) %>%
   mutate(Date = index(log_returns)) %>%
-  pivot_longer(-Date, names_to="Sector", values_to="Return")
+  pivot_longer(-Date, names_to = "Sector", values_to = "Return")
 
-ggplot(R_long, aes(x=Return)) +
-  geom_density(fill="steelblue", alpha=0.4, color="steelblue3") +
-  stat_function(fun=function(x, m, s) dnorm(x, m, s),
-                args=list(m=mean(R_long$Return), s=sd(R_long$Return)),
-                color="red", linetype="dashed", linewidth=0.7) +
-  facet_wrap(~Sector, scales="free_y", ncol=4) +
-  labs(x="Daily Log Return", y="Density") +
-  theme_bw(base_size=9) +
-  theme(strip.background=element_rect(fill="grey90"))
+# Per-sector normal fit (correct overlay; the previous version used a
+# single global mean/sd for every facet, which is misleading).
+norm_curves <- R_long %>%
+  group_by(Sector) %>%
+  summarise(m = mean(Return), s = sd(Return),
+            lo = min(Return), hi = max(Return), .groups = "drop") %>%
+  rowwise() %>%
+  do({
+    x <- seq(.$lo, .$hi, length.out = 200)
+    data.frame(Sector = .$Sector, Return = x,
+               NormDens = dnorm(x, mean = .$m, sd = .$s))
+  }) %>% ungroup()
+
+ggplot(R_long, aes(x = Return)) +
+  geom_density(fill = "steelblue", alpha = 0.4, color = "steelblue3") +
+  geom_line(data = norm_curves, aes(x = Return, y = NormDens),
+            color = "red", linetype = "dashed", linewidth = 0.6) +
+  facet_wrap(~ Sector, scales = "free", ncol = 4) +
+  labs(x = "Daily Log Return", y = "Density") +
+  theme_bw(base_size = 9) +
+  theme(strip.background = element_rect(fill = "grey90"))
 ```
 
 ### Correlation Structure
 
-```{r corr-heatmap, fig.width=7, fig.height=6, fig.cap="Pearson correlation matrix of daily log-returns. Cyclical sectors (left block) show stronger mutual correlations than defensive sectors. The Energy sector stands apart from both groups."}
+```{r corr-heatmap, fig.width=7, fig.height=6, fig.cap="Pearson correlation matrix of daily log-returns. Cyclical sectors (top-left block) show stronger mutual correlations than defensive sectors. The Energy sector stands apart from both groups."}
 corr_mat <- cor(R)
 rownames(corr_mat) <- colnames(corr_mat) <- sector_names
 
-# Order: cyclical first, defensive, energy
+# Reorder: cyclicals (incl. Comm.Serv), then defensives, then Energy last
 ord <- c(1,2,3,4,5,11,  6,7,8,9,  10)
 corr_ord <- corr_mat[ord, ord]
 
-ggcorrplot(corr_ord, method="square", type="full",
-           lab=TRUE, lab_size=2.8,
-           colors=c("#D73027","white","#4575B4"),
-           title="Sector Return Correlation Matrix",
-           ggtheme=theme_bw()) +
-  theme(axis.text.x=element_text(angle=45, hjust=1, size=8),
-        axis.text.y=element_text(size=8))
+ggcorrplot(corr_ord, method = "square", type = "full",
+           lab = TRUE, lab_size = 2.8,
+           colors = c("#D73027","white","#4575B4"),
+           title  = "Sector Return Correlation Matrix",
+           ggtheme = theme_bw()) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 8),
+        axis.text.y = element_text(size = 8))
 ```
 
 The correlation matrix reveals a clear block structure. The six cyclical sectors (Technology, Consumer Discretionary, Financials, Industrials, Materials, Communication Services) have pairwise correlations generally in the range 0.6--0.85. The four defensive sectors (Health Care, Consumer Staples, Utilities, Real Estate) are somewhat less correlated with each other (0.4--0.65) and substantially less correlated with cyclicals. Energy occupies an intermediate position, exhibiting moderate correlations with all other sectors. This block structure motivates the CCA in Section 5, where we formally test and quantify the linear relationship between the cyclical and defensive groups.
 
 ### Normality Tests
 
-The visual evidence of non-normality is confirmed by formal tests. We apply Mardia's test for multivariate normality, which assesses skewness and kurtosis jointly.
+The visual evidence of non-normality is confirmed by formal tests. We apply Mardia's test for multivariate normality, which assesses the (standardised) multivariate skewness and kurtosis. To avoid dependency on the `MVN` package (whose API has changed repeatedly across versions), we implement the test directly below.
 
 ```{r normality, results='asis'}
-mvn_res <- mvn(R, mvnTest="mardia", univariateTest="SW",
-               showOutliers=FALSE, multivariatePlot="none")
+mardia_test <- function(X) {
+  X <- as.matrix(X)
+  n <- nrow(X); p <- ncol(X)
+  Xc <- scale(X, scale = FALSE)
+  S  <- crossprod(Xc) / n
+  Si <- solve(S)
 
-# Extract Mardia results
-mardia_tbl <- mvn_res$multivariateNormality
-kable(mardia_tbl, booktabs=TRUE,
-      caption="Mardia's test for multivariate normality.
-               Both skewness and kurtosis components strongly reject normality.") %>%
-  kable_styling(latex_options="hold_position")
+  # Mahalanobis-like squared matrix
+  D  <- Xc %*% Si %*% t(Xc)
+
+  b1p <- sum(D^3) / n^2                  # multivariate skewness
+  b2p <- sum(diag(D)^2) / n              # multivariate kurtosis
+
+  # Skewness test  ~ chi-square
+  skew_stat <- n * b1p / 6
+  skew_df   <- p * (p + 1) * (p + 2) / 6
+  skew_p    <- pchisq(skew_stat, skew_df, lower.tail = FALSE)
+
+  # Kurtosis test  ~ N(0,1)
+  kurt_z <- (b2p - p * (p + 2)) / sqrt(8 * p * (p + 2) / n)
+  kurt_p <- 2 * pnorm(-abs(kurt_z))
+
+  data.frame(
+    Test      = c("Mardia Skewness", "Mardia Kurtosis"),
+    Statistic = c(round(skew_stat, 2), round(kurt_z, 2)),
+    df        = c(skew_df, NA),
+    p.value   = c(format.pval(skew_p, digits = 3, eps = .Machine$double.eps),
+                  format.pval(kurt_p, digits = 3, eps = .Machine$double.eps)),
+    Decision  = ifelse(c(skew_p, kurt_p) < 0.05,
+                       "Reject H0 (not MVN)", "Fail to reject"),
+    stringsAsFactors = FALSE
+  )
+}
+
+mardia_tbl <- mardia_test(R)
+kable(mardia_tbl, booktabs = TRUE,
+      caption = "Mardia's test for multivariate normality (manual implementation).
+                 Both skewness and kurtosis components strongly reject normality.") %>%
+  kable_styling(latex_options = "hold_position")
 ```
 
 Mardia's test strongly rejects multivariate normality ($p < 0.001$ for both the skewness and kurtosis statistics). This is expected given the heavy-tailed and negatively skewed marginals observed above. We discuss the implications for PCA and CCA in the Discussion section.
@@ -258,30 +350,37 @@ Mardia's test strongly rejects multivariate normality ($p < 0.001$ for both the 
 ```{r cumulative-returns, fig.width=10, fig.height=5, fig.cap="Cumulative log-return paths for all eleven sectors, 2018--2024. The COVID-19 crash (March 2020) and the 2022 rate cycle are clearly visible."}
 cum_ret <- apply(R, 2, cumsum)
 cum_df  <- as.data.frame(cum_ret) %>%
-  mutate(Date=index(log_returns)) %>%
-  pivot_longer(-Date, names_to="Sector", values_to="CumReturn")
+  mutate(Date = index(log_returns)) %>%
+  pivot_longer(-Date, names_to = "Sector", values_to = "CumReturn")
 
-ggplot(cum_df, aes(x=Date, y=CumReturn, color=Sector)) +
-  geom_line(linewidth=0.6) +
-  scale_color_viridis_d(option="turbo") +
-  labs(x=NULL, y="Cumulative Log Return", color="Sector") +
+ggplot(cum_df, aes(x = Date, y = CumReturn, color = Sector)) +
+  geom_line(linewidth = 0.6) +
+  scale_color_viridis_d(option = "turbo") +
+  labs(x = NULL, y = "Cumulative Log Return", color = "Sector") +
   theme_bw() +
-  theme(legend.position="right", legend.text=element_text(size=8))
+  theme(legend.position = "right", legend.text = element_text(size = 8))
 ```
 
-```{r rolling-vol, fig.width=10, fig.height=4, fig.cap="60-day rolling standard deviation of log-returns for selected sectors. Volatility clustering is pronounced, with spikes during the March 2020 COVID crash."}
-roll_sd <- rollapply(log_returns, width=60, FUN=sd, by.column=TRUE) %>%
-  as.data.frame() %>%
-  mutate(Date=index(rollapply(log_returns, 60, sd))) %>%
-  select(Date, XLK, XLV, XLE, XLU) %>%
-  setNames(c("Date","Technology","HealthCare","Energy","Utilities"))
+```{r rolling-vol, fig.width=10, fig.height=4, fig.cap="60-day rolling standard deviation (annualised) for selected sectors. Volatility clustering is pronounced, with spikes during the March 2020 COVID crash."}
+# NOTE: previous version mistakenly used tickers (XLK, XLV, ...) here even
+# though `log_returns` carries sector_names. Fixed below and `rollapply` is
+# computed only once.
+roll_sd_xts <- rollapply(log_returns, width = 60, FUN = sd, by.column = TRUE)
+roll_sd_xts <- na.omit(roll_sd_xts)
 
-roll_long <- pivot_longer(roll_sd, -Date, names_to="Sector", values_to="RollSD")
+roll_sd <- data.frame(Date = index(roll_sd_xts),
+                      coredata(roll_sd_xts),
+                      check.names = FALSE) %>%
+  select(Date, Technology, HealthCare, Energy, Utilities)
 
-ggplot(roll_long, aes(x=Date, y=RollSD*sqrt(252), color=Sector)) +
-  geom_line(linewidth=0.7) +
-  scale_color_manual(values=c("steelblue","firebrick","goldenrod3","seagreen4")) +
-  labs(x=NULL, y="Annualised Rolling Volatility (60-day)") +
+roll_long <- pivot_longer(roll_sd, -Date,
+                          names_to = "Sector", values_to = "RollSD")
+
+ggplot(roll_long, aes(x = Date, y = RollSD * sqrt(252), color = Sector)) +
+  geom_line(linewidth = 0.7) +
+  scale_color_manual(values = c("steelblue","firebrick",
+                                "goldenrod3","seagreen4")) +
+  labs(x = NULL, y = "Annualised Rolling Volatility (60-day)") +
   theme_bw()
 ```
 
@@ -307,48 +406,49 @@ We perform PCA on the demeaned return matrix. Because all variables are measured
 
 ```{r pca-fit}
 # Mean-centre
-R_c <- scale(R, center=TRUE, scale=FALSE)
+R_c <- scale(R, center = TRUE, scale = FALSE)
 
-pca_res <- prcomp(R_c, center=FALSE, scale.=FALSE)
+pca_res <- prcomp(R_c, center = FALSE, scale. = FALSE)
 pve     <- pca_res$sdev^2 / sum(pca_res$sdev^2)
 cpve    <- cumsum(pve)
 ```
 
 ```{r scree, fig.width=8, fig.height=4, fig.cap="Left: Scree plot of proportion of variance explained (PVE) by each PC. Right: Cumulative PVE. The elbow at PC2 and the 80\\% threshold at PC4 suggest that four factors capture most of the systematic variation."}
-pve_df <- data.frame(PC=1:p, PVE=pve*100, CPVE=cpve*100)
+pve_df <- data.frame(PC = 1:p, PVE = pve * 100, CPVE = cpve * 100)
 
-p1 <- ggplot(pve_df[1:11,], aes(x=PC, y=PVE)) +
-  geom_col(fill="steelblue", alpha=0.8) +
-  geom_line(aes(group=1), color="firebrick", linewidth=0.8) +
-  geom_point(color="firebrick", size=2) +
-  scale_x_continuous(breaks=1:11) +
-  labs(x="Principal Component", y="PVE (%)") +
+p1 <- ggplot(pve_df, aes(x = PC, y = PVE)) +
+  geom_col(fill = "steelblue", alpha = 0.8) +
+  geom_line(aes(group = 1), color = "firebrick", linewidth = 0.8) +
+  geom_point(color = "firebrick", size = 2) +
+  scale_x_continuous(breaks = 1:p) +
+  labs(x = "Principal Component", y = "PVE (%)") +
   theme_bw()
 
-p2 <- ggplot(pve_df[1:11,], aes(x=PC, y=CPVE)) +
-  geom_line(color="steelblue3", linewidth=1) +
-  geom_point(color="steelblue3", size=2) +
-  geom_hline(yintercept=80, linetype="dashed", color="firebrick") +
-  geom_hline(yintercept=90, linetype="dotted", color="grey50") +
-  annotate("text", x=9, y=81.5, label="80%", color="firebrick", size=3) +
-  scale_x_continuous(breaks=1:11) +
-  labs(x="Principal Component", y="Cumulative PVE (%)") +
+p2 <- ggplot(pve_df, aes(x = PC, y = CPVE)) +
+  geom_line(color = "steelblue3", linewidth = 1) +
+  geom_point(color = "steelblue3", size = 2) +
+  geom_hline(yintercept = 80, linetype = "dashed", color = "firebrick") +
+  geom_hline(yintercept = 90, linetype = "dotted", color = "grey50") +
+  annotate("text", x = p - 2, y = 82, label = "80%",
+           color = "firebrick", size = 3) +
+  scale_x_continuous(breaks = 1:p) +
+  labs(x = "Principal Component", y = "Cumulative PVE (%)") +
   theme_bw()
 
-grid.arrange(p1, p2, ncol=2)
+grid.arrange(p1, p2, ncol = 2)
 ```
 
 ```{r pve-table, results='asis'}
 pve_tbl <- data.frame(
-  PC   = paste0("PC", 1:11),
-  Eigenvalue = round(pca_res$sdev^2 * (n-1), 4),
-  PVE  = paste0(round(pve*100, 1), "%"),
-  CPVE = paste0(round(cpve*100, 1), "%")
+  PC         = paste0("PC", 1:p),
+  Eigenvalue = round(pca_res$sdev^2 * (n - 1), 4),
+  PVE        = paste0(round(pve  * 100, 1), "%"),
+  CPVE       = paste0(round(cpve * 100, 1), "%")
 )
-kable(pve_tbl, booktabs=TRUE,
-      caption="Eigenvalues and variance explained for each principal component.",
-      col.names=c("Component","Eigenvalue","PVE","Cumulative PVE")) %>%
-  kable_styling(latex_options="hold_position")
+kable(pve_tbl, booktabs = TRUE,
+      caption = "Eigenvalues and variance explained for each principal component.",
+      col.names = c("Component","Eigenvalue","PVE","Cumulative PVE")) %>%
+  kable_styling(latex_options = "hold_position")
 ```
 
 The first principal component alone explains approximately `r paste0(round(pve[1]*100,1),"%")` of total variance. This dominant factor is interpreted below as the market-wide factor, analogous to the market return in the CAPM. The first four components together explain `r paste0(round(cpve[4]*100,1),"%")` of variance, consistent with the finding in the asset pricing literature that equity returns have a low-rank factor structure.
@@ -361,17 +461,17 @@ rownames(load_mat) <- sector_names
 colnames(load_mat) <- paste0("PC", 1:4)
 
 load_df <- as.data.frame(load_mat) %>%
-  mutate(Sector=sector_names) %>%
-  pivot_longer(-Sector, names_to="PC", values_to="Loading")
+  mutate(Sector = sector_names) %>%
+  pivot_longer(-Sector, names_to = "PC", values_to = "Loading")
 
-ggplot(load_df, aes(x=PC, y=Sector, fill=Loading)) +
-  geom_tile(color="white") +
-  geom_text(aes(label=round(Loading,2)), size=3) +
-  scale_fill_gradient2(low="#D73027", mid="white", high="#4575B4",
-                       midpoint=0, limits=c(-0.7,0.7)) +
-  labs(x=NULL, y=NULL, fill="Loading") +
+ggplot(load_df, aes(x = PC, y = Sector, fill = Loading)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = round(Loading, 2)), size = 3) +
+  scale_fill_gradient2(low = "#D73027", mid = "white", high = "#4575B4",
+                       midpoint = 0, limits = c(-0.7, 0.7)) +
+  labs(x = NULL, y = NULL, fill = "Loading") +
   theme_bw() +
-  theme(axis.text.x=element_text(size=10, face="bold"))
+  theme(axis.text.x = element_text(size = 10, face = "bold"))
 ```
 
 The loadings reveal an interpretable factor structure:
@@ -386,16 +486,51 @@ The loadings reveal an interpretable factor structure:
 
 ### Biplot
 
-```{r biplot, fig.width=8, fig.height=7, fig.cap="Biplot of PC1 vs PC2. Each arrow represents a sector's loading vector; observations (grey dots) are the daily score pairs. Arrows pointing in similar directions indicate correlated sectors."}
-fviz_pca_biplot(pca_res, axes=c(1,2),
-                label="var",
-                col.var="contrib",
-                gradient.cols=c("steelblue","gold","firebrick"),
-                repel=TRUE,
-                alpha.ind=0.15,
-                col.ind="grey70",
-                title="PCA Biplot: PC1 vs PC2") +
-  theme_bw()
+```{r biplot, fig.width=8, fig.height=7, fig.cap="Biplot of PC1 vs PC2. Each arrow represents a sector's loading vector; observations (grey dots) are the daily score pairs. Arrows pointing in similar directions indicate correlated sectors. Arrow colour encodes the sector's contribution (squared loading) to the PC1--PC2 plane."}
+# Manual biplot using only ggplot2 -- avoids the factoextra / rlang
+# dependency chain, which is brittle across R versions.
+
+obs_df <- data.frame(PC1 = pca_res$x[, 1],
+                     PC2 = pca_res$x[, 2])
+
+loadings <- pca_res$rotation[, 1:2]
+
+# Scale arrows so they span roughly the same range as the score cloud.
+score_range   <- max(abs(range(obs_df$PC1, obs_df$PC2)))
+loading_range <- max(abs(loadings))
+scale_factor  <- 0.85 * score_range / loading_range
+
+arrow_df <- data.frame(
+  Sector  = rownames(loadings),
+  x_end   = loadings[, 1] * scale_factor,
+  y_end   = loadings[, 2] * scale_factor,
+  # "Contribution" = squared length of loading on the (PC1, PC2) plane, in %.
+  contrib = (loadings[, 1]^2 + loadings[, 2]^2) /
+            sum(loadings[, 1]^2 + loadings[, 2]^2) * 100
+)
+
+# Nudge labels outward from origin so they don't sit on arrow tips.
+arrow_df$lab_x <- arrow_df$x_end * 1.10
+arrow_df$lab_y <- arrow_df$y_end * 1.10
+
+ggplot() +
+  geom_hline(yintercept = 0, color = "grey80", linewidth = 0.3) +
+  geom_vline(xintercept = 0, color = "grey80", linewidth = 0.3) +
+  geom_point(data = obs_df, aes(x = PC1, y = PC2),
+             color = "grey70", alpha = 0.15, size = 0.8) +
+  geom_segment(data = arrow_df,
+               aes(x = 0, y = 0, xend = x_end, yend = y_end, color = contrib),
+               arrow = arrow(length = unit(0.22, "cm")), linewidth = 0.9) +
+  geom_text(data = arrow_df,
+            aes(x = lab_x, y = lab_y, label = Sector, color = contrib),
+            size = 3, fontface = "bold", show.legend = FALSE) +
+  scale_color_gradientn(colors = c("steelblue", "gold", "firebrick"),
+                        name = "Contrib (%)") +
+  labs(title = "PCA Biplot: PC1 vs PC2",
+       x = paste0("PC1 (", round(pve[1] * 100, 1), "%)"),
+       y = paste0("PC2 (", round(pve[2] * 100, 1), "%)")) +
+  theme_bw() +
+  coord_equal()
 ```
 
 ### Score Trajectories
@@ -403,21 +538,21 @@ fviz_pca_biplot(pca_res, axes=c(1,2),
 ```{r pc-scores-time, fig.width=10, fig.height=5, fig.cap="PC1 (market factor) and PC2 (cyclical-defensive spread) score trajectories over time. The COVID crash (March 2020) and the 2022 risk-off episode are clearly visible."}
 scores_df <- data.frame(
   Date = index(log_returns),
-  PC1  = pca_res$x[,1],
-  PC2  = pca_res$x[,2]
+  PC1  = pca_res$x[, 1],
+  PC2  = pca_res$x[, 2]
 )
 
-p_s1 <- ggplot(scores_df, aes(x=Date, y=PC1)) +
-  geom_line(color="steelblue3", linewidth=0.4) +
-  labs(y="PC1 Score", x=NULL, title="Market Factor (PC1)") +
+p_s1 <- ggplot(scores_df, aes(x = Date, y = PC1)) +
+  geom_line(color = "steelblue3", linewidth = 0.4) +
+  labs(y = "PC1 Score", x = NULL, title = "Market Factor (PC1)") +
   theme_bw()
 
-p_s2 <- ggplot(scores_df, aes(x=Date, y=PC2)) +
-  geom_line(color="firebrick3", linewidth=0.4) +
-  labs(y="PC2 Score", x=NULL, title="Cyclical vs Defensive (PC2)") +
+p_s2 <- ggplot(scores_df, aes(x = Date, y = PC2)) +
+  geom_line(color = "firebrick3", linewidth = 0.4) +
+  labs(y = "PC2 Score", x = NULL, title = "Cyclical vs Defensive (PC2)") +
   theme_bw()
 
-grid.arrange(p_s1, p_s2, nrow=2)
+grid.arrange(p_s1, p_s2, nrow = 2)
 ```
 
 \newpage
@@ -457,23 +592,24 @@ X <- R[, c("Technology","Cons.Disc","Financials","Industrials",
            "Materials","Comm.Serv")]
 Y <- R[, c("HealthCare","Cons.Staples","Utilities","RealEstate")]
 
-X_c <- scale(X, center=TRUE, scale=FALSE)
-Y_c <- scale(Y, center=TRUE, scale=FALSE)
+X_c <- scale(X, center = TRUE, scale = FALSE)
+Y_c <- scale(Y, center = TRUE, scale = FALSE)
 
 cca_res <- cc(X_c, Y_c)
 ```
 
 ```{r cca-results, results='asis'}
 rho_df <- data.frame(
-  k   = 1:4,
-  rho = round(cca_res$cor, 4),
+  k    = 1:4,
+  rho  = round(cca_res$cor, 4),
   rho2 = round(cca_res$cor^2, 4)
 )
-kable(rho_df, booktabs=TRUE,
-      caption="Estimated canonical correlations and their squares for the
-               cyclical (X) vs defensive (Y) sector groups.",
-      col.names=c("$k$","$\\hat{\\rho}_k^*$","$(\\hat{\\rho}_k^*)^2$")) %>%
-  kable_styling(latex_options="hold_position")
+kable(rho_df, booktabs = TRUE,
+      caption = "Estimated canonical correlations and their squares for the
+                 cyclical (X) vs defensive (Y) sector groups.",
+      col.names = c("$k$","$\\hat{\\rho}_k^*$","$(\\hat{\\rho}_k^*)^2$"),
+      escape = FALSE) %>%
+  kable_styling(latex_options = "hold_position")
 ```
 
 ### Tests of Independence
@@ -481,13 +617,12 @@ kable(rho_df, booktabs=TRUE,
 Under the assumption of multivariate normality and i.i.d. observations, Wilks' $\Lambda$, Pillai's trace, Hotelling-Lawley trace, and Roy's largest root statistics can be used to test whether the canonical correlations are significantly different from zero. The null hypothesis $H_0^{(k)}: \rho_k^* = \cdots = \rho_r^* = 0$ (all remaining canonical correlations are zero) is tested sequentially.
 
 ```{r cca-tests, results='asis'}
-# p.asym from CCP package: asymptotic p-values for canonical correlations
 rho_vec <- cca_res$cor
 n_obs   <- nrow(X_c)
 p1      <- ncol(X_c)
 p2      <- ncol(Y_c)
 
-test_res <- p.asym(rho_vec, n_obs, p1, p2, tstat="Wilks")
+test_res <- p.asym(rho_vec, n_obs, p1, p2, tstat = "Wilks")
 
 wilks_df <- data.frame(
   k       = 1:4,
@@ -495,15 +630,16 @@ wilks_df <- data.frame(
   WilksL  = round(test_res$stat, 4),
   df1     = test_res$df1,
   df2     = round(test_res$df2, 1),
-  pval    = formatC(test_res$p.value, format="e", digits=3)
+  pval    = formatC(test_res$p.value, format = "e", digits = 3)
 )
-kable(wilks_df, booktabs=TRUE,
-      caption="Sequential Wilks' $\\Lambda$ tests for the significance of canonical
-               correlations. The null hypothesis is that all correlations from
-               $\\rho_k^*$ onwards are zero.",
-      col.names=c("$k$","$\\hat{\\rho}_k^*$","Wilks' $\\Lambda$",
-                  "df1","df2","$p$-value")) %>%
-  kable_styling(latex_options="hold_position")
+kable(wilks_df, booktabs = TRUE,
+      caption = "Sequential Wilks' $\\Lambda$ tests for the significance of canonical
+                 correlations. The null hypothesis is that all correlations from
+                 $\\rho_k^*$ onwards are zero.",
+      col.names = c("$k$","$\\hat{\\rho}_k^*$","Wilks' $\\Lambda$",
+                    "df1","df2","$p$-value"),
+      escape = FALSE) %>%
+  kable_styling(latex_options = "hold_position")
 ```
 
 All four canonical correlations are highly significant. In particular, $\hat{\rho}_1^* \approx$ `r round(rho_vec[1],3)`, indicating a very strong linear relationship between the first cyclical and defensive canonical variates. This is consistent with the broad market factor found in PCA: a common economy-wide shock drives both cyclical and defensive sectors, though to different degrees.
@@ -511,35 +647,38 @@ All four canonical correlations are highly significant. In particular, $\hat{\rh
 ### Canonical Loadings
 
 ```{r cca-loadings, fig.width=10, fig.height=5, fig.cap="Canonical loadings (correlations between original variables and canonical variates) for the first two canonical pairs. Left: loadings for the X (cyclical) canonical variates. Right: loadings for the Y (defensive) canonical variates."}
-# Compute structure correlations (loadings)
-load_X <- comput(X_c, Y_c, cca_res)$corr.X.xscores
-load_Y <- comput(X_c, Y_c, cca_res)$corr.Y.yscores
+# Structure correlations (loadings): compute once, reuse.
+cca_comp <- comput(X_c, Y_c, cca_res)
+load_X <- cca_comp$corr.X.xscores
+load_Y <- cca_comp$corr.Y.yscores
 
-lx_df <- as.data.frame(load_X[,1:2]) %>%
-  mutate(Variable=colnames(X)) %>%
-  setNames(c("CV1","CV2","Variable")) %>%
-  pivot_longer(-Variable, names_to="CanoVar", values_to="Loading")
+lx_df <- as.data.frame(load_X[, 1:2]) %>%
+  setNames(c("CV1","CV2")) %>%
+  mutate(Variable = colnames(X)) %>%
+  pivot_longer(-Variable, names_to = "CanoVar", values_to = "Loading")
 
-ly_df <- as.data.frame(load_Y[,1:2]) %>%
-  mutate(Variable=colnames(Y)) %>%
-  setNames(c("CV1","CV2","Variable")) %>%
-  pivot_longer(-Variable, names_to="CanoVar", values_to="Loading")
+ly_df <- as.data.frame(load_Y[, 1:2]) %>%
+  setNames(c("CV1","CV2")) %>%
+  mutate(Variable = colnames(Y)) %>%
+  pivot_longer(-Variable, names_to = "CanoVar", values_to = "Loading")
 
-pl1 <- ggplot(lx_df, aes(x=Variable, y=Loading, fill=CanoVar)) +
-  geom_col(position="dodge") +
-  scale_fill_manual(values=c("steelblue","firebrick")) +
-  labs(title="Cyclical Sectors (X)", y="Canonical Loading", x=NULL, fill=NULL) +
+pl1 <- ggplot(lx_df, aes(x = Variable, y = Loading, fill = CanoVar)) +
+  geom_col(position = "dodge") +
+  scale_fill_manual(values = c("steelblue","firebrick")) +
+  labs(title = "Cyclical Sectors (X)", y = "Canonical Loading",
+       x = NULL, fill = NULL) +
   theme_bw() +
-  theme(axis.text.x=element_text(angle=30, hjust=1))
+  theme(axis.text.x = element_text(angle = 30, hjust = 1))
 
-pl2 <- ggplot(ly_df, aes(x=Variable, y=Loading, fill=CanoVar)) +
-  geom_col(position="dodge") +
-  scale_fill_manual(values=c("steelblue","firebrick")) +
-  labs(title="Defensive Sectors (Y)", y="Canonical Loading", x=NULL, fill=NULL) +
+pl2 <- ggplot(ly_df, aes(x = Variable, y = Loading, fill = CanoVar)) +
+  geom_col(position = "dodge") +
+  scale_fill_manual(values = c("steelblue","firebrick")) +
+  labs(title = "Defensive Sectors (Y)", y = "Canonical Loading",
+       x = NULL, fill = NULL) +
   theme_bw() +
-  theme(axis.text.x=element_text(angle=30, hjust=1))
+  theme(axis.text.x = element_text(angle = 30, hjust = 1))
 
-grid.arrange(pl1, pl2, ncol=2)
+grid.arrange(pl1, pl2, ncol = 2)
 ```
 
 ```{r cv-scatter, fig.width=8, fig.height=4, fig.cap="Scatter plots of the first (left) and second (right) canonical variate pairs $(U_1, V_1)$ and $(U_2, V_2)$."}
@@ -547,25 +686,25 @@ scores_X <- as.matrix(X_c) %*% cca_res$xcoef
 scores_Y <- as.matrix(Y_c) %*% cca_res$ycoef
 
 cv_df <- data.frame(
-  U1=scores_X[,1], V1=scores_Y[,1],
-  U2=scores_X[,2], V2=scores_Y[,2]
+  U1 = scores_X[, 1], V1 = scores_Y[, 1],
+  U2 = scores_X[, 2], V2 = scores_Y[, 2]
 )
 
-ps1 <- ggplot(cv_df, aes(x=U1, y=V1)) +
-  geom_point(alpha=0.25, size=0.8, color="steelblue") +
-  geom_smooth(method="lm", se=FALSE, color="firebrick", linewidth=1) +
-  labs(title=bquote("CV1: "*rho[1]^"*"~"= "*.(round(cca_res$cor[1],3))),
-       x=expression(U[1]), y=expression(V[1])) +
+ps1 <- ggplot(cv_df, aes(x = U1, y = V1)) +
+  geom_point(alpha = 0.25, size = 0.8, color = "steelblue") +
+  geom_smooth(method = "lm", se = FALSE, color = "firebrick", linewidth = 1) +
+  labs(title = bquote("CV1: " * rho[1]^"*" ~ "= " * .(round(cca_res$cor[1], 3))),
+       x = expression(U[1]), y = expression(V[1])) +
   theme_bw()
 
-ps2 <- ggplot(cv_df, aes(x=U2, y=V2)) +
-  geom_point(alpha=0.25, size=0.8, color="steelblue") +
-  geom_smooth(method="lm", se=FALSE, color="firebrick", linewidth=1) +
-  labs(title=bquote("CV2: "*rho[2]^"*"~"= "*.(round(cca_res$cor[2],3))),
-       x=expression(U[2]), y=expression(V[2])) +
+ps2 <- ggplot(cv_df, aes(x = U2, y = V2)) +
+  geom_point(alpha = 0.25, size = 0.8, color = "steelblue") +
+  geom_smooth(method = "lm", se = FALSE, color = "firebrick", linewidth = 1) +
+  labs(title = bquote("CV2: " * rho[2]^"*" ~ "= " * .(round(cca_res$cor[2], 3))),
+       x = expression(U[2]), y = expression(V[2])) +
   theme_bw()
 
-grid.arrange(ps1, ps2, ncol=2)
+grid.arrange(ps1, ps2, ncol = 2)
 ```
 
 **Interpretation of the first canonical pair.** The first canonical pair $(U_1, V_1)$ has $\hat{\rho}_1^* \approx$ `r round(cca_res$cor[1],3)`. All cyclical loadings on $U_1$ are positive and of similar magnitude, while all defensive loadings on $V_1$ are also positive. This confirms that the first canonical dimension captures the market-wide factor: on days when the market rises, both cyclical and defensive sector returns move in the same direction, though cyclicals more so.
@@ -577,32 +716,32 @@ grid.arrange(ps1, ps2, ncol=2)
 To assess the stability of canonical correlations over time, we repeat the CCA on two sub-periods: pre-COVID (2018--2019) and post-COVID (2021--2024).
 
 ```{r subperiod-cca}
-# Sub-period indices
 dates <- index(log_returns)
-pre_idx  <- which(dates < as.Date("2020-01-01"))
+pre_idx  <- which(dates <  as.Date("2020-01-01"))
 post_idx <- which(dates >= as.Date("2021-01-01"))
 
-cca_pre  <- cc(scale(X[pre_idx,],  center=TRUE, scale=FALSE),
-               scale(Y[pre_idx,],  center=TRUE, scale=FALSE))
-cca_post <- cc(scale(X[post_idx,], center=TRUE, scale=FALSE),
-               scale(Y[post_idx,], center=TRUE, scale=FALSE))
+cca_pre  <- cc(scale(X[pre_idx,  ], center = TRUE, scale = FALSE),
+               scale(Y[pre_idx,  ], center = TRUE, scale = FALSE))
+cca_post <- cc(scale(X[post_idx, ], center = TRUE, scale = FALSE),
+               scale(Y[post_idx, ], center = TRUE, scale = FALSE))
 
 sub_tbl <- data.frame(
-  k       = 1:4,
-  Full    = round(cca_res$cor, 4),
-  PreCOVID  = round(cca_pre$cor, 4),
+  k         = 1:4,
+  Full      = round(cca_res$cor,  4),
+  PreCOVID  = round(cca_pre$cor,  4),
   PostCOVID = round(cca_post$cor, 4)
 )
 ```
 
 ```{r subperiod-table, results='asis'}
-kable(sub_tbl, booktabs=TRUE,
-      caption="Canonical correlations across the full sample and two sub-periods.
-               Stability of $\\hat{\\rho}_1^*$ suggests the market factor is robust;
-               higher-order correlations vary more across regimes.",
-      col.names=c("$k$","Full (2018--24)","Pre-COVID (2018--19)",
-                  "Post-COVID (2021--24)")) %>%
-  kable_styling(latex_options="hold_position")
+kable(sub_tbl, booktabs = TRUE,
+      caption = "Canonical correlations across the full sample and two sub-periods.
+                 Stability of $\\hat{\\rho}_1^*$ suggests the market factor is robust;
+                 higher-order correlations vary more across regimes.",
+      col.names = c("$k$","Full (2018--24)","Pre-COVID (2018--19)",
+                    "Post-COVID (2021--24)"),
+      escape = FALSE) %>%
+  kable_styling(latex_options = "hold_position")
 ```
 
 \newpage
@@ -948,7 +1087,7 @@ Carroll, J.D. (1968). A generalization of canonical correlation analysis to thre
 
 Chen, M. and Huang, J. (2012). Sparse reduced-rank regression for simultaneous dimension reduction and variable selection. *Journal of the American Statistical Association*, 107(500), 1533--1545.
 
-Chen, M. and Bickel, P.J. (2006). Efficient estimation of covariance and partial correlation based on Gaussian graphical models. *Annals of Statistics*, 34(6), 2662--2669.
+Chen, M. and Bickel, P.J. (2006). Efficient estimation of covariance and partial correlation based on Gaussian graphical models. *Annals of Statistics*, 34(6), 2662--2679.
 
 Connor, G. and Korajczyk, R.A. (1988). Risk and return in an equilibrium APT: Application of a new test methodology. *Journal of Financial Economics*, 21(2), 255--289.
 
