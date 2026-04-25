@@ -16,7 +16,6 @@ header-includes:
   - \usepackage{amsmath}
   - \usepackage{amssymb}
   - \usepackage{amsthm}
-  - \usepackage{bm}
   - \usepackage{booktabs}
   - \usepackage{float}
   - \usepackage{geometry}
@@ -392,13 +391,13 @@ The rolling volatility plot confirms substantial time variation in variance — 
 
 ### Motivation and Setup
 
-PCA seeks an orthogonal linear transformation of the $n \times p$ data matrix $\mathbf{R}$ such that the projected coordinates have successively maximal variance. Let $\mathbf{\Sigma}$ denote the population covariance matrix of returns. The $k$-th principal component direction $\mathbf{v}_k$ solves
+PCA seeks an orthogonal linear transformation of the $n \times p$ data matrix $\mathbf{R}$ such that the projected coordinates have successively maximal variance. Let $\symbf{\Sigma}$ denote the population covariance matrix of returns. The $k$-th principal component direction $\mathbf{v}_k$ solves
 
 $$
-\mathbf{v}_k = \arg\max_{\|\mathbf{v}\|=1,\, \mathbf{v} \perp \mathbf{v}_1,\ldots,\mathbf{v}_{k-1}} \mathbf{v}^\top \mathbf{\Sigma} \mathbf{v},
+\mathbf{v}_k = \arg\max_{\|\mathbf{v}\|=1,\, \mathbf{v} \perp \mathbf{v}_1,\ldots,\mathbf{v}_{k-1}} \mathbf{v}^\top \symbf{\Sigma} \mathbf{v},
 $$
 
-with solution given by the $k$-th eigenvector of $\mathbf{\Sigma}$. In practice we substitute the sample covariance matrix $\hat{\mathbf{\Sigma}} = \frac{1}{n-1}\mathbf{R}^\top \mathbf{R}$ (with mean-centred columns). The $k$-th principal component score is $\mathbf{z}_k = \mathbf{R}\mathbf{v}_k$, and the proportion of variance explained by the first $K$ components is $\sum_{k=1}^K \lambda_k / \sum_{k=1}^p \lambda_k$, where $\lambda_k$ are the ordered eigenvalues.
+with solution given by the $k$-th eigenvector of $\symbf{\Sigma}$. In practice we substitute the sample covariance matrix $\hat{\symbf{\Sigma}} = \frac{1}{n-1}\mathbf{R}^\top \mathbf{R}$ (with mean-centred columns). The $k$-th principal component score is $\mathbf{z}_k = \mathbf{R}\mathbf{v}_k$, and the proportion of variance explained by the first $K$ components is $\sum_{k=1}^K \lambda_k / \sum_{k=1}^p \lambda_k$, where $\lambda_k$ are the ordered eigenvalues.
 
 We perform PCA on the demeaned return matrix. Because all variables are measured in the same units (log-returns), we use the covariance matrix rather than the correlation matrix, which would give equal weight to each sector regardless of its volatility.
 
@@ -574,13 +573,13 @@ with $p_1 = 6$ and $p_2 = 4$. The Energy sector is excluded from both groups due
 
 ### Mathematical Framework
 
-Let $\bm{\Sigma}_{11}$, $\bm{\Sigma}_{22}$, and $\bm{\Sigma}_{12}$ denote the population covariance matrices of $\mathbf{X}$, $\mathbf{Y}$, and their cross-covariance, respectively. CCA seeks vectors $\mathbf{a} \in \mathbb{R}^{p_1}$ and $\mathbf{b} \in \mathbb{R}^{p_2}$ that maximise
+Let $\symbf{\Sigma}_{11}$, $\symbf{\Sigma}_{22}$, and $\symbf{\Sigma}_{12}$ denote the population covariance matrices of $\mathbf{X}$, $\mathbf{Y}$, and their cross-covariance, respectively. CCA seeks vectors $\mathbf{a} \in \mathbb{R}^{p_1}$ and $\mathbf{b} \in \mathbb{R}^{p_2}$ that maximise
 
 $$
-\rho = \text{Cor}(\mathbf{X}\mathbf{a},\, \mathbf{Y}\mathbf{b}) = \frac{\mathbf{a}^\top \bm{\Sigma}_{12} \mathbf{b}}{\sqrt{\mathbf{a}^\top \bm{\Sigma}_{11}\mathbf{a} \cdot \mathbf{b}^\top \bm{\Sigma}_{22}\mathbf{b}}}.
+\rho = \text{Cor}(\mathbf{X}\mathbf{a},\, \mathbf{Y}\mathbf{b}) = \frac{\mathbf{a}^\top \symbf{\Sigma}_{12} \mathbf{b}}{\sqrt{\mathbf{a}^\top \symbf{\Sigma}_{11}\mathbf{a} \cdot \mathbf{b}^\top \symbf{\Sigma}_{22}\mathbf{b}}}.
 $$
 
-This is equivalent to finding the singular value decomposition of the matrix $\bm{\Sigma}_{11}^{-1/2}\bm{\Sigma}_{12}\bm{\Sigma}_{22}^{-1/2}$. The $k$-th canonical correlation $\rho_k^*$ is the $k$-th singular value, and the canonical variates are $U_k = \mathbf{X}\mathbf{a}_k$, $V_k = \mathbf{Y}\mathbf{b}_k$, satisfying $\text{Cor}(U_k, V_j) = \rho_k^* \mathbf{1}_{k=j}$.
+This is equivalent to finding the singular value decomposition of the matrix $\symbf{\Sigma}_{11}^{-1/2}\symbf{\Sigma}_{12}\symbf{\Sigma}_{22}^{-1/2}$. The $k$-th canonical correlation $\rho_k^*$ is the $k$-th singular value, and the canonical variates are $U_k = \mathbf{X}\mathbf{a}_k$, $V_k = \mathbf{Y}\mathbf{b}_k$, satisfying $\text{Cor}(U_k, V_j) = \rho_k^* \mathbf{1}_{k=j}$.
 
 The minimum of $p_1$ and $p_2$ gives the number of canonical pairs, so we have $r = \min(6,4) = 4$ canonical correlations.
 
@@ -800,7 +799,7 @@ We analysed daily log-returns of eleven S\&P 500 sector ETFs over 2018--2024 usi
 
 ### Limitations of Classical CCA in High Dimensions
 
-Classical CCA, as described in Section 5, finds pairs of linear combinations of two sets of variables that are maximally correlated. While powerful in moderate dimensions, it fails catastrophically when the number of variables $p = p_1 + p_2$ is comparable to or larger than the sample size $n$. Formally, when $p_1 > n$ or $p_2 > n$, the sample covariance matrices $\hat{\bm{\Sigma}}_{11}$ and $\hat{\bm{\Sigma}}_{22}$ are rank-deficient and thus not invertible. Even when $p < n$, if $p/n$ is not negligible, the sample canonical correlations are severely upward-biased estimators of the population canonical correlations (Bai, Miao, and Pan 1996; Wachter 1980).
+Classical CCA, as described in Section 5, finds pairs of linear combinations of two sets of variables that are maximally correlated. While powerful in moderate dimensions, it fails catastrophically when the number of variables $p = p_1 + p_2$ is comparable to or larger than the sample size $n$. Formally, when $p_1 > n$ or $p_2 > n$, the sample covariance matrices $\hat{\symbf{\Sigma}}_{11}$ and $\hat{\symbf{\Sigma}}_{22}$ are rank-deficient and thus not invertible. Even when $p < n$, if $p/n$ is not negligible, the sample canonical correlations are severely upward-biased estimators of the population canonical correlations (Bai, Miao, and Pan 1996; Wachter 1980).
 
 To see the severity of the problem, note that in the null case where $\mathbf{X}$ and $\mathbf{Y}$ are independent, the sample canonical correlations concentrate near
 $$
@@ -831,18 +830,18 @@ This review covers:
 Let $\mathbf{X} \in \mathbb{R}^{n \times p_1}$ and $\mathbf{Y} \in \mathbb{R}^{n \times p_2}$ be mean-centred data matrices. Define the block sample covariance matrix
 
 $$
-\hat{\bm{\Sigma}} = \frac{1}{n}\begin{pmatrix} \mathbf{X}^\top\mathbf{X} & \mathbf{X}^\top\mathbf{Y} \\ \mathbf{Y}^\top\mathbf{X} & \mathbf{Y}^\top\mathbf{Y} \end{pmatrix} =: \begin{pmatrix} \hat{\bm{\Sigma}}_{11} & \hat{\bm{\Sigma}}_{12} \\ \hat{\bm{\Sigma}}_{21} & \hat{\bm{\Sigma}}_{22} \end{pmatrix}.
+\hat{\symbf{\Sigma}} = \frac{1}{n}\begin{pmatrix} \mathbf{X}^\top\mathbf{X} & \mathbf{X}^\top\mathbf{Y} \\ \mathbf{Y}^\top\mathbf{X} & \mathbf{Y}^\top\mathbf{Y} \end{pmatrix} =: \begin{pmatrix} \hat{\symbf{\Sigma}}_{11} & \hat{\symbf{\Sigma}}_{12} \\ \hat{\symbf{\Sigma}}_{21} & \hat{\symbf{\Sigma}}_{22} \end{pmatrix}.
 $$
 
 Classical CCA solves the sequence of problems
 $$
-\max_{\mathbf{a}, \mathbf{b}} \mathbf{a}^\top \hat{\bm{\Sigma}}_{12} \mathbf{b}
+\max_{\mathbf{a}, \mathbf{b}} \mathbf{a}^\top \hat{\symbf{\Sigma}}_{12} \mathbf{b}
 \quad \text{subject to} \quad
-\mathbf{a}^\top \hat{\bm{\Sigma}}_{11} \mathbf{a} = 1, \quad \mathbf{b}^\top \hat{\bm{\Sigma}}_{22} \mathbf{b} = 1,
+\mathbf{a}^\top \hat{\symbf{\Sigma}}_{11} \mathbf{a} = 1, \quad \mathbf{b}^\top \hat{\symbf{\Sigma}}_{22} \mathbf{b} = 1,
 $$
-and orthogonality of each solution to the previous ones. The maximiser is the leading left-singular vector of $\hat{\bm{\Sigma}}_{11}^{-1/2}\hat{\bm{\Sigma}}_{12}\hat{\bm{\Sigma}}_{22}^{-1/2}$.
+and orthogonality of each solution to the previous ones. The maximiser is the leading left-singular vector of $\hat{\symbf{\Sigma}}_{11}^{-1/2}\hat{\symbf{\Sigma}}_{12}\hat{\symbf{\Sigma}}_{22}^{-1/2}$.
 
-When $p_1 \geq n$ or $p_2 \geq n$, the inverses $\hat{\bm{\Sigma}}_{11}^{-1/2}$ and $\hat{\bm{\Sigma}}_{22}^{-1/2}$ do not exist, and the solution is not unique.
+When $p_1 \geq n$ or $p_2 \geq n$, the inverses $\hat{\symbf{\Sigma}}_{11}^{-1/2}$ and $\hat{\symbf{\Sigma}}_{22}^{-1/2}$ do not exist, and the solution is not unique.
 
 ### The Witten--Tibshirani--Hastie (2009) Formulation
 
@@ -862,9 +861,9 @@ where $c_1 > 0$ and $c_2 > 0$ are tuning parameters controlling the degree of sp
 \begin{remark}
 Several features of this formulation are noteworthy.
 \begin{itemize}
-  \item The objective $\mathbf{a}^\top \mathbf{X}^\top \mathbf{Y} \mathbf{b}$ is proportional to the sample covariance between $\mathbf{X}\mathbf{a}$ and $\mathbf{Y}\mathbf{b}$, not their correlation, since the normalisation constraints $\|\mathbf{a}\|_2 \leq 1$, $\|\mathbf{b}\|_2 \leq 1$ use the Euclidean norm rather than the data-adaptive $\hat{\bm{\Sigma}}_{11}^{1/2}$-norm.
+  \item The objective $\mathbf{a}^\top \mathbf{X}^\top \mathbf{Y} \mathbf{b}$ is proportional to the sample covariance between $\mathbf{X}\mathbf{a}$ and $\mathbf{Y}\mathbf{b}$, not their correlation, since the normalisation constraints $\|\mathbf{a}\|_2 \leq 1$, $\|\mathbf{b}\|_2 \leq 1$ use the Euclidean norm rather than the data-adaptive $\hat{\symbf{\Sigma}}_{11}^{1/2}$-norm.
   \item The $\ell_1$ constraints $\|\mathbf{a}\|_1 \leq c_1$ and $\|\mathbf{b}\|_1 \leq c_2$ are the hallmark of lasso-type regularisation. By the KKT conditions, the optimal $\mathbf{a}$ and $\mathbf{b}$ will have many zero components when $c_1$ and $c_2$ are sufficiently small.
-  \item When $c_1 \geq \sqrt{p_1}$ and $c_2 \geq \sqrt{p_2}$, the $\ell_1$ constraints are inactive (by Cauchy-Schwarz), and the solution reduces to the leading left-singular vector of $\mathbf{X}^\top\mathbf{Y}$, which is related to but distinct from classical CCA (it omits the $\hat{\bm{\Sigma}}_{11}^{-1/2}$ whitening).
+  \item When $c_1 \geq \sqrt{p_1}$ and $c_2 \geq \sqrt{p_2}$, the $\ell_1$ constraints are inactive (by Cauchy-Schwarz), and the solution reduces to the leading left-singular vector of $\mathbf{X}^\top\mathbf{Y}$, which is related to but distinct from classical CCA (it omits the $\hat{\symbf{\Sigma}}_{11}^{-1/2}$ whitening).
 \end{itemize}
 \end{remark}
 
@@ -919,18 +918,18 @@ Several variants of the basic SCCA formulation have been proposed:
 
 \textbf{(a) Regularised CCA (Vinod 1976; Leurgans et al. 1993).} Instead of $\ell_1$ penalties, one adds ridge penalties to the covariance matrices:
 $$
-\max_{\mathbf{a},\mathbf{b}} \mathbf{a}^\top \hat{\bm{\Sigma}}_{12} \mathbf{b}
+\max_{\mathbf{a},\mathbf{b}} \mathbf{a}^\top \hat{\symbf{\Sigma}}_{12} \mathbf{b}
 \quad \text{s.t.} \quad
-\mathbf{a}^\top (\hat{\bm{\Sigma}}_{11} + \kappa_1 \mathbf{I}) \mathbf{a} = 1, \quad
-\mathbf{b}^\top (\hat{\bm{\Sigma}}_{22} + \kappa_2 \mathbf{I}) \mathbf{b} = 1.
+\mathbf{a}^\top (\hat{\symbf{\Sigma}}_{11} + \kappa_1 \mathbf{I}) \mathbf{a} = 1, \quad
+\mathbf{b}^\top (\hat{\symbf{\Sigma}}_{22} + \kappa_2 \mathbf{I}) \mathbf{b} = 1.
 $$
 This makes the matrices invertible for any $\kappa_1, \kappa_2 > 0$ but does not induce sparsity.
 
 \textbf{(b) CCA with group sparsity.} When variables are naturally grouped (e.g., genes in pathways, voxels in brain regions), group lasso penalties $\sum_g \|\mathbf{a}_g\|_2 \leq c_1$ encourage entire groups to be selected or discarded simultaneously (Yuan and Lin 2006).
 
-\textbf{(c) Probabilistic SCCA.} Wang (2007) and Klami et al. (2013) formulate CCA as a latent variable model: $\mathbf{x}_i = \mathbf{W}_1 \mathbf{z}_i + \bm{\epsilon}_i^{(1)}$, $\mathbf{y}_i = \mathbf{W}_2 \mathbf{z}_i + \bm{\epsilon}_i^{(2)}$, where $\mathbf{z}_i$ is a shared latent factor. Sparsity is imposed via spike-and-slab priors on $\mathbf{W}_1$ and $\mathbf{W}_2$, enabling Bayesian variable selection and uncertainty quantification.
+\textbf{(c) Probabilistic SCCA.} Wang (2007) and Klami et al. (2013) formulate CCA as a latent variable model: $\mathbf{x}_i = \mathbf{W}_1 \mathbf{z}_i + \mathbf{\epsilon}_i^{(1)}$, $\mathbf{y}_i = \mathbf{W}_2 \mathbf{z}_i + \mathbf{\epsilon}_i^{(2)}$, where $\mathbf{z}_i$ is a shared latent factor. Sparsity is imposed via spike-and-slab priors on $\mathbf{W}_1$ and $\mathbf{W}_2$, enabling Bayesian variable selection and uncertainty quantification.
 
-\textbf{(d) CCA via SVD regularisation.} Chen et al. (2013) propose to regularise the matrix $\hat{\bm{\Sigma}}_{11}^{-1/2}\hat{\bm{\Sigma}}_{12}\hat{\bm{\Sigma}}_{22}^{-1/2}$ by truncated SVD, which shrinks small singular values to zero. This is related to but distinct from the Witten et al. approach.
+\textbf{(d) CCA via SVD regularisation.} Chen et al. (2013) propose to regularise the matrix $\hat{\symbf{\Sigma}}_{11}^{-1/2}\hat{\symbf{\Sigma}}_{12}\hat{\symbf{\Sigma}}_{22}^{-1/2}$ by truncated SVD, which shrinks small singular values to zero. This is related to but distinct from the Witten et al. approach.
 
 ## Theoretical Properties
 
@@ -946,7 +945,7 @@ The following result synthesises work by Gao, Ma, and Zhou (2015) and Chen and B
 
 \begin{theorem}[Informal; Gao--Ma--Zhou 2015]
 \label{thm:consistency}
-Under regularity conditions on $\bm{\Sigma}$ (bounded condition number, eigengap condition $\rho_1^* - \rho_2^* \geq \delta > 0$), if $\mathbf{a}_1^*$ and $\mathbf{b}_1^*$ are $s_1$- and $s_2$-sparse respectively, and if the tuning parameters $c_1 \sim \sqrt{s_1}$ and $c_2 \sim \sqrt{s_2}$, then the sparse CCA estimator satisfies
+Under regularity conditions on $\symbf{\Sigma}$ (bounded condition number, eigengap condition $\rho_1^* - \rho_2^* \geq \delta > 0$), if $\mathbf{a}_1^*$ and $\mathbf{b}_1^*$ are $s_1$- and $s_2$-sparse respectively, and if the tuning parameters $c_1 \sim \sqrt{s_1}$ and $c_2 \sim \sqrt{s_2}$, then the sparse CCA estimator satisfies
 $$
 \|\hat{\mathbf{a}}_1 - \mathbf{a}_1^*\|_2 = O_P\!\left(\sqrt{\frac{s_1 \log p_1}{n}} + \sqrt{\frac{s_2 \log p_2}{n}}\right),
 $$
@@ -1015,7 +1014,7 @@ Sparse reduced-rank regression (Chen and Huang 2012) imposes $\ell_1$ penalties 
 
 ### Graphical Lasso and Partial Correlations
 
-While CCA measures marginal associations between two groups, one might prefer partial correlations that control for other variables. The \textbf{graphical lasso} (Friedman, Hastie, and Tibshirani 2008) estimates a sparse precision matrix $\mathbf{\Omega} = \bm{\Sigma}^{-1}$, whose off-diagonal entries encode partial correlation structure. The inter-group block $\mathbf{\Omega}_{12}$ encodes the partial correlations between $\mathbf{X}$ and $\mathbf{Y}$ after conditioning on all other variables. A joint sparse model on both $\bm{\Sigma}_{11}^{-1}$, $\bm{\Sigma}_{22}^{-1}$ and $\bm{\Sigma}_{12}$ unifies the graphical lasso and SCCA perspectives (Rothman, Levina, and Zhu 2010).
+While CCA measures marginal associations between two groups, one might prefer partial correlations that control for other variables. The \textbf{graphical lasso} (Friedman, Hastie, and Tibshirani 2008) estimates a sparse precision matrix $\mathbf{\Omega} = \symbf{\Sigma}^{-1}$, whose off-diagonal entries encode partial correlation structure. The inter-group block $\mathbf{\Omega}_{12}$ encodes the partial correlations between $\mathbf{X}$ and $\mathbf{Y}$ after conditioning on all other variables. A joint sparse model on both $\symbf{\Sigma}_{11}^{-1}$, $\symbf{\Sigma}_{22}^{-1}$ and $\symbf{\Sigma}_{12}$ unifies the graphical lasso and SCCA perspectives (Rothman, Levina, and Zhu 2010).
 
 ### Partial Least Squares
 
