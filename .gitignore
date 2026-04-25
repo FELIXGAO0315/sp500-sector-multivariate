@@ -1,0 +1,30 @@
+# R Markdown / knitr build artefacts (regenerated on each knit)
+*_cache/
+*_files/
+*.html
+*.pdf
+!project_requirement.pdf
+
+# R / RStudio session files
+.Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+Rplots.pdf
+
+# Stray plot output from Rscript runs
+Rplots.*
+
+# Cache duplicate (the .rds is the canonical form)
+sector_returns_cache.csv
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*~
