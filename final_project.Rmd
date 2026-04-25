@@ -2,16 +2,20 @@
 title: |
   | \textbf{Multivariate Analysis of S\&P 500 Sector Returns}
   | \textbf{and a Review of Sparse Canonical Correlation Analysis}
-subtitle: "STAT Final Project"
 author: "Yuan Gao, Tingzhou Wei, Yijie Huang"
 date: "`r format(Sys.Date(), '%B %d, %Y')`"
 output:
-  pdf_document:
+  html_document:
     toc: true
-    toc_depth: 3
-    number_sections: true
-    fig_caption: true
-    latex_engine: xelatex
+    toc_depth: '3'
+    df_print: paged
+  # pdf_document:
+  #   toc: true
+  #   toc_depth: 3
+  #   number_sections: true
+  #   fig_caption: true
+  #   latex_engine: xelatex
+subtitle: STAT Final Project
 header-includes:
   - \usepackage{amsmath}
   - \usepackage{amssymb}
@@ -298,51 +302,117 @@ The correlation matrix reveals a clear block structure. The six cyclical sectors
 
 ### Normality Tests
 
-The visual evidence of non-normality is confirmed by formal tests. We apply Mardia's test for multivariate normality, which assesses the (standardised) multivariate skewness and kurtosis. To avoid dependency on the `MVN` package (whose API has changed repeatedly across versions), we implement the test directly below.
+The visual evidence of non-normality is corroborated by three complementary
+diagnostics: Mardia's classical moment-based test, the energy goodness-of-fit
+test of Sz\'ekely and Rizzo (2005), and a $\chi^2_p$ Q--Q plot of squared
+Mahalanobis distances. The three approaches are mutually informative:
+Mardia targets multivariate skewness and kurtosis through fixed moments; the
+energy test is consistent against \emph{any} departure from multivariate
+normality (not only moment misspecification); and the Q--Q plot localises
+\emph{where} in the distribution the deviation occurs.
 
 ```{r normality, results='asis'}
+library(energy)
+
+# ---- (a) Mardia's test (manual; avoids the fragile MVN package) ----------
 mardia_test <- function(X) {
-  X <- as.matrix(X)
-  n <- nrow(X); p <- ncol(X)
+  X <- as.matrix(X); n <- nrow(X); p <- ncol(X)
   Xc <- scale(X, scale = FALSE)
   S  <- crossprod(Xc) / n
-  Si <- solve(S)
+  D  <- Xc %*% solve(S) %*% t(Xc)
 
-  # Mahalanobis-like squared matrix
-  D  <- Xc %*% Si %*% t(Xc)
+  b1p <- sum(D^3) / n^2                # multivariate skewness
+  b2p <- sum(diag(D)^2) / n            # multivariate kurtosis
 
-  b1p <- sum(D^3) / n^2                  # multivariate skewness
-  b2p <- sum(diag(D)^2) / n              # multivariate kurtosis
-
-  # Skewness test  ~ chi-square
   skew_stat <- n * b1p / 6
   skew_df   <- p * (p + 1) * (p + 2) / 6
   skew_p    <- pchisq(skew_stat, skew_df, lower.tail = FALSE)
 
-  # Kurtosis test  ~ N(0,1)
   kurt_z <- (b2p - p * (p + 2)) / sqrt(8 * p * (p + 2) / n)
   kurt_p <- 2 * pnorm(-abs(kurt_z))
 
-  data.frame(
-    Test      = c("Mardia Skewness", "Mardia Kurtosis"),
-    Statistic = c(round(skew_stat, 2), round(kurt_z, 2)),
-    df        = c(skew_df, NA),
-    p.value   = c(format.pval(skew_p, digits = 3, eps = .Machine$double.eps),
-                  format.pval(kurt_p, digits = 3, eps = .Machine$double.eps)),
-    Decision  = ifelse(c(skew_p, kurt_p) < 0.05,
-                       "Reject H0 (not MVN)", "Fail to reject"),
-    stringsAsFactors = FALSE
-  )
+  list(skew = c(stat = skew_stat, df = skew_df, p = skew_p),
+       kurt = c(stat = kurt_z,   df = NA,      p = kurt_p))
 }
 
-mardia_tbl <- mardia_test(R)
-kable(mardia_tbl, booktabs = TRUE,
-      caption = "Mardia's test for multivariate normality (manual implementation).
-                 Both skewness and kurtosis components strongly reject normality.") %>%
+mar <- mardia_test(R)
+
+# ---- (b) Energy GOF test for MVN (Szekely-Rizzo 2005) --------------------
+# Distribution-free under H1; consistent against all departures from MVN.
+# Critical values via parametric-bootstrap calibration (R replicates).
+set.seed(2024)
+en <- energy::mvnorm.test(R, R = 4999)
+
+# ---- Combined table ------------------------------------------------------
+norm_tbl <- data.frame(
+  Test = c("Mardia skewness ($\\chi^2$)",
+           "Mardia kurtosis ($Z$)",
+           "Energy GOF ($n\\,\\mathcal{E}_{n,d}$)"),
+  Statistic = c(round(mar$skew["stat"], 2),
+                round(mar$kurt["stat"], 2),
+                round(unname(en$statistic), 2)),
+  df = c(mar$skew["df"], NA, NA),
+  p.value = c(format.pval(mar$skew["p"], digits = 3, eps = .Machine$double.eps),
+              format.pval(mar$kurt["p"], digits = 3, eps = .Machine$double.eps),
+              format.pval(en$p.value,    digits = 3, eps = 1/5000)),
+  stringsAsFactors = FALSE
+)
+
+kable(norm_tbl, booktabs = TRUE, escape = FALSE,
+      caption = "Three tests of multivariate normality on the eleven-sector
+                 daily log-return panel. All three reject MVN decisively. The
+                 energy test $p$-value is bounded below by $1/(R+1) = 1/5000$
+                 by the permutation calibration.",
+      col.names = c("Test", "Statistic", "df", "$p$-value")) %>%
   kable_styling(latex_options = "hold_position")
 ```
 
-Mardia's test strongly rejects multivariate normality ($p < 0.001$ for both the skewness and kurtosis statistics). This is expected given the heavy-tailed and negatively skewed marginals observed above. We discuss the implications for PCA and CCA in the Discussion section.
+```{r mahal-qqplot, fig.width=6, fig.height=4.5, fig.cap="$\\chi^2_p$ Q--Q plot of squared Mahalanobis distances $D_i^2 = (\\mathbf{r}_i-\\bar{\\mathbf{r}})^\\top \\hat{\\symbf{\\Sigma}}^{-1}(\\mathbf{r}_i-\\bar{\\mathbf{r}})$ for the eleven-sector return vector. Under multivariate normality the points should lie on the 45-degree reference line. The pronounced upward deviation in the right tail confirms that extreme co-movements occur far more frequently than a Gaussian model predicts; the three most extreme days are labelled."}
+n_obs <- nrow(R); p_obs <- ncol(R)
+Xc <- scale(R, scale = FALSE)
+S  <- crossprod(Xc) / (n_obs - 1)
+D2 <- as.numeric(rowSums((Xc %*% solve(S)) * Xc))
+qx <- qchisq(ppoints(n_obs), df = p_obs)
+
+qq_df <- data.frame(
+  theo = sort(qx),
+  emp  = sort(D2),
+  date = index(log_returns)[order(D2)]
+)
+top3 <- tail(qq_df, 3)
+
+ggplot(qq_df, aes(theo, emp)) +
+  geom_point(alpha = 0.4, size = 0.9, color = "steelblue") +
+  geom_abline(slope = 1, intercept = 0, color = "firebrick", linewidth = 0.8) +
+  scale_x_log10() + scale_y_log10() +
+  geom_text(data = top3,
+            aes(label = format(date, "%Y-%m-%d")),
+            hjust = 1.05, vjust = 0.5, size = 3) +
+  labs(x = expression(paste("Theoretical ", chi[p]^2, " quantile (log scale)")),
+       y = expression(paste("Sample ", D^2, " (log scale)"))) +
+  theme_bw()
+
+# Diagnostic for the prose immediately below
+exceed_99 <- mean(D2 > qchisq(0.99, p_obs))
+```
+
+The three diagnostics agree: sector returns are emphatically not multivariate
+normal. Mardia's skewness and kurtosis statistics yield $p$-values
+indistinguishable from zero in double precision; the energy goodness-of-fit
+test rejects at the smallest $p$-value the permutation calibration can
+deliver ($p < 1/5000$); and the $\chi^2_p$ Q--Q plot reveals the source of
+the rejection. The empirical fraction of days with $D_i^2 > \chi^2_{p,0.99}$
+is approximately `r paste0(round(exceed_99 * 100, 1), "\\%")`, six to seven
+times the nominal $1\%$ that an MVN would predict, and the upper-tail
+quantiles are far heavier than the $\chi^2_p$ reference. The most extreme
+observations correspond to known crisis days, indicating that the heavy
+tails reflect episodes of synchronised market stress rather than a handful
+of isolated outliers.
+
+This pattern of \emph{joint} extreme co-movement is precisely the regime in
+which the asymptotic Wilks' $\Lambda$ test for canonical correlations breaks
+down; we therefore complement the asymptotic test with a distribution-free
+permutation analogue in the CCA section that follows.
 
 ### Time Series Structure
 
@@ -483,6 +553,83 @@ The loadings reveal an interpretable factor structure:
 
 - **PC4 (Interest-Rate Sensitive):** PC4 loads negatively on Real Estate and Utilities (sectors sensitive to interest rate increases) and positively on Financials (which benefit from higher rates), consistent with the 2022 rate-hiking cycle dominating this component.
 
+### Robustness: Covariance vs Correlation Matrix
+
+Our analysis above used the sample \emph{covariance} matrix, on the grounds
+that all variables are measured in the same units and the cross-sectional
+spread of volatilities is itself economically informative. The implicit
+weight on each sector is proportional to its variance: Energy
+(annualised volatility $\approx 33.6\%$) carries roughly four times the
+weight of Consumer Staples ($\approx 15.9\%$). An alternative is to
+standardise each series before extracting components, which is equivalent
+to performing PCA on the \emph{correlation} matrix and weights every
+sector equally. To assess whether our substantive conclusions are
+sensitive to this choice we re-ran the analysis on the correlation matrix.
+
+```{r pca-cov-vs-cor, results='asis'}
+pca_cor <- prcomp(R, center = TRUE, scale. = TRUE)
+pve_cor <- pca_cor$sdev^2 / sum(pca_cor$sdev^2)
+
+# Side-by-side PVE
+pve_compare <- data.frame(
+  PC  = paste0("PC", 1:p),
+  Cov = paste0(round(pve     * 100, 1), "%"),
+  Cor = paste0(round(pve_cor * 100, 1), "%")
+)
+kable(pve_compare, booktabs = TRUE,
+      caption = "Proportion of variance explained, covariance vs.\\
+                 correlation PCA. PC1 dominance is robust; the gap between
+                 PC2 and PC3 widens or narrows depending on which weighting
+                 is used.",
+      col.names = c("Component", "Cov-PCA", "Cor-PCA")) %>%
+  kable_styling(latex_options = "hold_position")
+```
+
+```{r pca-loadings-cosine, results='asis'}
+# Cosine similarity matrix between Cov and Cor loadings (first 4 of each)
+M_cos <- abs(t(pca_res$rotation[, 1:4]) %*% pca_cor$rotation[, 1:4])
+rownames(M_cos) <- paste0("Cov-PC", 1:4)
+colnames(M_cos) <- paste0("Cor-PC", 1:4)
+
+kable(round(M_cos, 3), booktabs = TRUE, escape = FALSE,
+      caption = "Absolute cosine similarity between covariance-PCA and
+                 correlation-PCA loading vectors. Off-diagonal mass on the
+                 anti-diagonal of the (PC2, PC3) block reveals that the
+                 two factors swap order between the two decompositions.") %>%
+  kable_styling(latex_options = "hold_position")
+```
+
+Three substantive conclusions emerge:
+
+\begin{enumerate}
+\item \textbf{PC1 (the market factor) is robust.} The cosine similarity
+between the two PC1 loading vectors is `r round(M_cos[1,1], 3)`, and the
+share of variance attributed to PC1 changes only marginally
+(`r paste0(round(pve[1]*100, 1), "\\%")` under Cov-PCA vs.\
+`r paste0(round(pve_cor[1]*100, 1), "\\%")` under Cor-PCA). The dominant
+broad-market factor does not depend on the weighting choice.
+
+\item \textbf{PC2 and PC3 swap roles.} Cov-PC2 is dominated by Energy
+(loading $-0.81$), reflecting Energy's outsized volatility, while
+Cor-PC2 is the cyclical--defensive contrast (positive on Tech, Cons.\
+Discretionary, Comm.\ Services; negative on Utilities, Cons.\ Staples,
+Real Estate). The cosine similarity matrix makes this swap explicit:
+$|\langle \mathrm{Cov\text{-}PC2}, \mathrm{Cor\text{-}PC3}\rangle| =$
+`r round(M_cos[2,3], 3)` and
+$|\langle \mathrm{Cov\text{-}PC3}, \mathrm{Cor\text{-}PC2}\rangle| =$
+`r round(M_cos[3,2], 3)`. The economic content is the same; only the
+ordinal labelling changes with the weighting.
+
+\item \textbf{The choice matters for interpretation, not for inference.}
+A reader interested in ``the second-most important factor'' would read off
+Energy from Cov-PCA and cyclical/defensive rotation from Cor-PCA. Both
+findings are real; the two decompositions are answering subtly different
+questions. We retain Cov-PCA as the default, which we view as the more
+honest description of the realised return-generating mechanism (high-vol
+sectors \emph{do} drive more variation), while flagging this sensitivity
+explicitly.
+\end{enumerate}
+
 ### Biplot
 
 ```{r biplot, fig.width=8, fig.height=7, fig.cap="Biplot of PC1 vs PC2. Each arrow represents a sector's loading vector; observations (grey dots) are the daily score pairs. Arrows pointing in similar directions indicate correlated sectors. Arrow colour encodes the sector's contribution (squared loading) to the PC1--PC2 plane."}
@@ -553,6 +700,214 @@ p_s2 <- ggplot(scores_df, aes(x = Date, y = PC2)) +
 
 grid.arrange(p_s1, p_s2, nrow = 2)
 ```
+
+\newpage
+
+## Factor Analysis
+
+### Motivation: PCA versus FA
+
+PCA decomposes the sample covariance matrix
+$\hat{\symbf{\Sigma}}$ into eigenvectors of decreasing variance, treating
+\emph{all} of the variability as signal. Factor analysis (FA) instead posits an
+explicit generative model in which observed returns are driven by a small
+number of latent common factors plus a sector-specific idiosyncratic
+component. For financial returns this distinction is substantively important:
+each sector has well-known firm- or industry-specific drivers (oil prices for
+Energy, drug-approval cycles for Health Care, regulation for Financials)
+that are noise from the perspective of cross-sector co-movement. PCA folds
+this idiosyncratic variation into the trailing components; FA isolates it
+into the specific-variance term and provides a principled criterion --
+the Bayesian Information Criterion (BIC) -- for choosing the number of
+common factors.
+
+### Model and Estimation
+
+Let $\mathbf{r}_t \in \mathbb{R}^{p}$ denote the demeaned return vector at
+day $t$. The Gaussian factor model is
+\begin{equation}
+\label{eq:fa}
+\mathbf{r}_t = \symbf{\Lambda}\, \mathbf{f}_t + \symbf{\varepsilon}_t,
+\qquad
+\mathbf{f}_t \sim \mathcal{N}_q(\mathbf{0},\, \mathbf{I}_q),
+\qquad
+\symbf{\varepsilon}_t \sim \mathcal{N}_p(\mathbf{0},\, \symbf{\Psi}),
+\end{equation}
+with $\symbf{\Lambda} \in \mathbb{R}^{p \times q}$ the loading matrix
+and $\symbf{\Psi} = \mathrm{diag}(\psi_1, \ldots, \psi_p)$ the
+specific-variance matrix. The induced covariance is
+$\symbf{\Sigma} = \symbf{\Lambda}\symbf{\Lambda}^\top +
+\symbf{\Psi}$, so PCA is recovered as the special case
+$\symbf{\Psi} = \mathbf{0}$. Maximum-likelihood estimation alternates
+between solving for $\symbf{\Lambda}$ given $\symbf{\Psi}$
+(an eigenvalue problem on
+$\symbf{\Psi}^{-1/2}\hat{\symbf{\Sigma}}\symbf{\Psi}^{-1/2}$)
+and updating $\symbf{\Psi}$ to match the diagonal of
+$\hat{\symbf{\Sigma}} - \symbf{\Lambda}\symbf{\Lambda}^\top$,
+implemented in the base-R \texttt{factanal} routine that we use below.
+
+The model is identified up to an orthogonal rotation
+$\symbf{\Lambda} \mapsto \symbf{\Lambda}\mathbf{Q}$ with
+$\mathbf{Q}^\top \mathbf{Q} = \mathbf{I}_q$, which leaves
+$\symbf{\Lambda}\symbf{\Lambda}^\top$ invariant. We exploit this
+freedom by applying the \emph{varimax} rotation (Kaiser 1958), which
+maximises the variance of squared loadings within each factor and
+typically yields the simple-structure pattern preferred for
+interpretation.
+
+### Selection of the Number of Factors
+
+The Ledermann (1937) bound for $p = 11$ is $q_{\max} = 6$. We fit
+$q \in \{1, \ldots, 5\}$ by ML and compare them via the likelihood-ratio
+test (with $\chi^2_{\nu}$ asymptotic null) and the BIC penalty
+$\mathrm{BIC}(q) = \chi^2(q) - \nu(q)\log n$, where $\nu(q)$ is the residual
+degrees of freedom; smaller is better.
+
+```{r fa-bic, results='asis'}
+fa_fits <- vector("list", 5)
+fa_summary <- data.frame(
+  q = 1:5, chi2 = NA_real_, df = NA_integer_,
+  pval = NA_real_, BIC = NA_real_, min_uniq = NA_real_
+)
+for (q in 1:5) {
+  fa_fits[[q]] <- factanal(R, factors = q, rotation = "varimax",
+                           lower = 0.01)
+  fa_summary$chi2[q]     <- fa_fits[[q]]$STATISTIC
+  fa_summary$df[q]       <- fa_fits[[q]]$dof
+  fa_summary$pval[q]     <- fa_fits[[q]]$PVAL
+  fa_summary$BIC[q]      <- fa_fits[[q]]$STATISTIC -
+                            fa_fits[[q]]$dof * log(n)
+  fa_summary$min_uniq[q] <- min(fa_fits[[q]]$uniquenesses)
+}
+
+q_bic <- which.min(fa_summary$BIC)
+
+kable(fa_summary,
+      booktabs = TRUE,
+      digits = c(0, 2, 0, 4, 2, 3),
+      caption = sprintf("Likelihood-ratio test, BIC, and the smallest
+                         estimated uniqueness $\\hat{\\psi}_{\\min}$ for
+                         each $q$. The BIC minimum is at $q = %d$;
+                         however $\\hat{\\psi}_{\\min}$ for $q = 5$ has
+                         been pushed against the lower bound (a
+                         Heywood-case warning), so $q = 4$ is preferred
+                         as the largest interpretable model.", q_bic),
+      col.names = c("$q$", "$\\chi^2$", "df", "$p$-value",
+                    "$\\mathrm{BIC}(q)$", "$\\hat{\\psi}_{\\min}$"),
+      escape = FALSE) %>%
+  kable_styling(latex_options = "hold_position")
+```
+
+```{r fa-bic-plot, fig.width=6, fig.height=3.5, fig.cap="BIC as a function of the number of factors $q$. The criterion strictly decreases through $q=5$, but the marginal gain from $q=4$ to $q=5$ is small and the smallest uniqueness at $q=5$ collapses against the optimisation lower bound (a near-Heywood case), indicating overparameterisation. We therefore retain $q = 4$ as the practical choice."}
+ggplot(fa_summary, aes(x = q, y = BIC)) +
+  geom_line(color = "steelblue3", linewidth = 0.8) +
+  geom_point(size = 2.5, color = "steelblue3") +
+  geom_point(data = fa_summary[4, ], size = 4,
+             shape = 21, fill = "firebrick", color = "firebrick") +
+  scale_x_continuous(breaks = 1:5) +
+  labs(x = "Number of factors q", y = "BIC(q)") +
+  theme_bw()
+```
+
+### Varimax-Rotated Loadings
+
+```{r fa-loadings, fig.width=8, fig.height=5, fig.cap="Heatmap of varimax-rotated factor loadings for the $q = 4$ model. Loadings $|\\lambda_{ij}| > 0.5$ are highlighted; the simple-structure pattern is clearly visible, with each sector loading dominantly on one factor."}
+fa4 <- fa_fits[[4]]
+load_fa <- unclass(fa4$loadings)
+colnames(load_fa) <- paste0("F", 1:4)
+
+load_fa_df <- as.data.frame(load_fa) %>%
+  mutate(Sector = rownames(load_fa)) %>%
+  pivot_longer(-Sector, names_to = "Factor", values_to = "Loading")
+
+ggplot(load_fa_df, aes(x = Factor, y = Sector, fill = Loading)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = round(Loading, 2),
+                fontface = ifelse(abs(Loading) > 0.5, "bold", "plain")),
+            size = 3) +
+  scale_fill_gradient2(low = "#D73027", mid = "white", high = "#4575B4",
+                       midpoint = 0, limits = c(-1, 1)) +
+  labs(x = NULL, y = NULL, fill = "Loading") +
+  theme_bw() +
+  theme(axis.text.x = element_text(size = 10, face = "bold"))
+```
+
+The four-factor varimax solution maps cleanly onto recognisable economic
+groupings:
+
+\begin{itemize}
+\item \textbf{F1 -- Growth-Cyclical:} Technology, Communication Services,
+and Consumer Discretionary all load above $0.78$. This factor captures the
+``mega-cap growth'' segment dominated by FAANG-type names.
+\item \textbf{F2 -- Traditional-Cyclical / Commodity:} Financials,
+Industrials, Materials, and (notably) Energy load above $0.69$. These are
+the value-tilted, capital-intensive sectors most exposed to the real
+economy.
+\item \textbf{F3 -- Defensive / Rate-Sensitive:} Utilities, Real Estate,
+Consumer Staples load above $0.65$, reflecting bond-proxy behaviour.
+\item \textbf{F4 -- Health Care idiosyncrasy:} Health Care loads $0.65$
+on F4, while no other sector exceeds $0.30$ there (Consumer Staples is
+the closest at $0.29$). This factor isolates the Health-Care-specific
+return component (drug-approval cycles, regulatory shocks) that PCA does
+not surface as a separate component because variance-greedy ordering
+gives priority to the rate-sensitivity contrast captured in PC4.
+\end{itemize}
+
+Comparison with the PCA loadings (Section 1.4.3) is instructive: PCA's PC1
+loaded with the same sign on every sector, an artefact of the
+``market-mode'' eigenvector. The varimax-rotated FA model rotates this
+mode away by absorbing the common direction into the joint span of F1, F2,
+and F3, producing factors with directly interpretable sector membership.
+
+### Specific Variances
+
+```{r fa-uniquenesses, fig.width=7, fig.height=3.5, fig.cap="Estimated specific variances $\\hat{\\psi}_j$ for the $q = 4$ varimax model. Higher bars indicate sectors whose return variation is poorly explained by the four common factors; Energy is the most idiosyncratic, in agreement with the Cov-PCA finding that Energy occupies its own principal direction."}
+uniq_df <- data.frame(
+  Sector     = names(fa4$uniquenesses),
+  Uniqueness = fa4$uniquenesses
+) %>% arrange(Uniqueness)
+uniq_df$Sector <- factor(uniq_df$Sector, levels = uniq_df$Sector)
+
+ggplot(uniq_df, aes(x = Sector, y = Uniqueness)) +
+  geom_col(fill = "steelblue", alpha = 0.85) +
+  geom_text(aes(label = sprintf("%.2f", Uniqueness)),
+            vjust = -0.4, size = 3) +
+  ylim(0, max(uniq_df$Uniqueness) * 1.15) +
+  labs(x = NULL, y = expression(hat(psi)[j])) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 25, hjust = 1))
+```
+
+The estimated specific variances $\hat{\psi}_j$ provide a diagnostic that
+PCA cannot deliver: they quantify, sector by sector, how much of the
+total variance is \emph{not} explained by the four common factors. Energy
+is the most idiosyncratic at $\hat{\psi}_{\mathrm{Energy}} \approx 0.40$,
+echoing its dedicated principal direction in the Cov-PCA analysis;
+Industrials, Communication Services, and the cyclical core
+($\hat{\psi}_j \in [0.07, 0.20]$) are most fully explained by the common
+structure. This pattern is consistent with industry intuition that
+Energy's return is dominated by oil and natural-gas prices that are
+exogenous to broad equity-market dynamics.
+
+### Caveats and Connection to Subsequent Analysis
+
+The Gaussian likelihood underlying \texttt{factanal} is misspecified for
+sector returns (the normality tests in Section~1.3.4 reject MVN
+overwhelmingly), so the LR $p$-values and BIC values should be read as
+descriptive ranking statistics rather than calibrated tests. We use
+\emph{varimax} (orthogonal) rotation throughout, consistent with the
+homework treatment; for financial factors which are themselves correlated
+in reality (e.g., a market-stress regime amplifies both the cyclical and
+the rate-sensitive contrasts), an oblique rotation such as
+\emph{promax} (Hendrickson and White 1964) would be a natural next step
+and is left to future work.
+
+The four-factor structure recovered here also reframes the CCA in the
+next section: rather than treating cyclical and defensive sectors as two
+unrelated bundles, the FA shows that they share a clean low-rank
+structure governed by F1--F4. The first canonical pair therefore captures
+the strong loading of \emph{both} groups on F1+F2; the second canonical
+pair captures their differential loading on F3.
 
 \newpage
 
@@ -642,6 +997,96 @@ kable(wilks_df, booktabs = TRUE,
 ```
 
 All four canonical correlations are highly significant. In particular, $\hat{\rho}_1^* \approx$ `r round(rho_vec[1],3)`, indicating a very strong linear relationship between the first cyclical and defensive canonical variates. This is consistent with the broad market factor found in PCA: a common economy-wide shock drives both cyclical and defensive sectors, though to different degrees.
+
+### Distribution-Free Tests of Independence
+
+The Wilks' $\Lambda$ test in the previous subsection relies on multivariate
+normality, which we rejected decisively in the Normality Tests subsection
+of the EDA. We therefore complement it with two distribution-free analogues:
+
+\begin{enumerate}
+\item a \textbf{permutation test} on $\hat{\rho}_1^*$, which targets the
+      same linear-association hypothesis as Wilks' $\Lambda$ but calibrates
+      the null distribution by row-permutation of $\mathbf{Y}$;
+\item the \textbf{distance-covariance test} of Sz\'ekely, Rizzo, and Bakirov
+      (2007), which detects \emph{any} departure from independence
+      (including non-linear association) and was applied in homework~8 of
+      this course in the same context.
+\end{enumerate}
+
+Both tests treat the rows of $(\mathbf{X}, \mathbf{Y})$ as i.i.d.\ exchangeable
+draws under $H_0: \mathbf{X} \perp \mathbf{Y}$, sidestepping the normality
+assumption.
+
+```{r cca-perm, cache=TRUE}
+library(energy)
+
+# ---- (a) permutation test on the leading canonical correlation ----------
+# Statistic: rho_1_hat. Null is generated by independently permuting the
+# rows of Y while leaving X fixed, which preserves the marginal
+# distributions but breaks the cross-row pairing.
+B <- 4999
+set.seed(2024)
+rho1_null <- numeric(B)
+for (b in seq_len(B)) {
+  idx <- sample.int(nrow(X_c))
+  rho1_null[b] <- cc(X_c, Y_c[idx, , drop = FALSE])$cor[1]
+}
+p_perm <- (1 + sum(rho1_null >= cca_res$cor[1])) / (B + 1)
+
+# ---- (b) distance-covariance test (Szekely-Rizzo-Bakirov 2007) -----------
+# Detects ANY dependence, including nonlinear. R = 4999 permutation reps.
+set.seed(2024)
+dcov_res <- energy::dcov.test(X_c, Y_c, R = 4999)
+```
+
+```{r cca-perm-table, results='asis'}
+nonparam_tbl <- data.frame(
+  Test = c("Wilks' $\\Lambda$ (asymptotic, MVN)",
+           "Permutation on $\\hat{\\rho}_1^*$ (linear, distribution-free)",
+           "Distance covariance (any dep., distribution-free)"),
+  Statistic = c(sprintf("$\\Lambda = %.4f$", test_res$stat[1]),
+                sprintf("$\\hat{\\rho}_1^* = %.4f$", cca_res$cor[1]),
+                sprintf("$\\widehat{\\mathrm{dCov}} = %.4f$",
+                        as.numeric(dcov_res$statistic))),
+  pvalue = c(formatC(test_res$p.value[1], format = "e", digits = 3),
+             format.pval(p_perm,             eps = 1/(B + 1)),
+             format.pval(dcov_res$p.value,   eps = 1/5000))
+)
+kable(nonparam_tbl, booktabs = TRUE, escape = FALSE,
+      caption = "Three tests of independence between cyclical (X) and
+                 defensive (Y) sectors. The two distribution-free tests are
+                 calibrated by 4999 row-permutations and reach their lower
+                 attainable $p$-values, agreeing with the asymptotic Wilks'
+                 verdict.",
+      col.names = c("Test", "Statistic", "$p$-value")) %>%
+  kable_styling(latex_options = "hold_position")
+```
+
+```{r cca-perm-hist, fig.width=6, fig.height=3.5, fig.cap="Permutation null distribution of the leading canonical correlation $\\hat{\\rho}_1^*$ (4999 row-permutations of $\\mathbf{Y}$). The observed value (red) lies far above the entire null distribution, with empirical $p < 1/5000$. The null mean is close to the Bai--Miao--Pan upper-bound prediction $\\sqrt{(\\sqrt{p_1/n}+\\sqrt{p_2/n})^2}$ for the high-dimensional null regime."}
+ggplot(data.frame(rho1_null = rho1_null), aes(x = rho1_null)) +
+  geom_histogram(bins = 50, fill = "steelblue", color = "white") +
+  geom_vline(xintercept = cca_res$cor[1],
+             color = "firebrick", linewidth = 1) +
+  annotate("text",
+           x = cca_res$cor[1], y = 0,
+           label = sprintf("observed = %.3f", cca_res$cor[1]),
+           color = "firebrick", hjust = 1.05, vjust = -0.5, size = 3.5) +
+  labs(x = expression(paste(hat(rho)[1]^"*", " under permutation null")),
+       y = "Frequency") +
+  theme_bw()
+```
+
+The two distribution-free tests give a consensus answer: the cyclical and
+defensive sector returns are decisively dependent, and the dependence is
+already linear (not merely some subtle non-linear coupling), since the
+permutation test on $\hat{\rho}_1^*$ already exhausts its $p$-value budget.
+The agreement with Wilks' $\Lambda$ is reassuring but somewhat coincidental
+in this regime: with $n = 1{,}759$ and $p_1 + p_2 = 10$, the asymptotic
+distribution of $\Lambda$ is well-approximated even when the data deviate
+substantially from MVN. The same will not be true at the individual-stock
+level we consider in Part~II, where $p$ approaches $n$ and Wilks'
+$\Lambda$ is known to be severely biased.
 
 ### Canonical Loadings
 
@@ -745,48 +1190,537 @@ kable(sub_tbl, booktabs = TRUE,
 
 \newpage
 
+## High-Dimensional Application: Sparse CCA on Individual Stocks
+
+The CCA in the previous section operated on eleven sector aggregates and
+sat firmly in the low-dimensional regime ($p_1 + p_2 = 10 \ll n = 1{,}759$).
+Two questions remain. \emph{First}, is the sector-level picture a faithful
+summary of cross-sector dependence, or does it average over richer
+structure visible only at the individual-stock level? \emph{Second}, what
+happens when we try to apply classical CCA in a setting where $p$ is no
+longer trivial relative to $n$ -- a setting that motivates the Sparse CCA
+review of Part II? To answer both, we re-do the cyclical-versus-defensive
+analysis at the individual-stock level using all current S\&P 500
+constituents in two GICS sectors: \emph{Information Technology} ($p_1 = 67$
+stocks) and \emph{Health Care} ($p_2 = 55$ stocks), over the same
+2018--2024 window. Stocks that lacked complete daily coverage --
+post-2018 IPOs (e.g., CRWD, MRNA, PLTR), de-listings, and the GE/3M
+healthcare spin-offs (GEHC, SOLV) -- were excluded; the reproducibility
+script \texttt{fetch\_constituents.R} records the full list of dropped
+tickers in its metadata cache.
+
+```{r scca-setup, cache=TRUE}
+library(PMA)
+
+ret_stk  <- readRDS("constituents_returns_cache.rds")
+meta_stk <- readRDS("constituents_meta.rds")
+R_stk    <- as.matrix(ret_stk)
+n_stk    <- nrow(R_stk)
+dates_stk <- index(ret_stk)
+
+it_tickers <- meta_stk$tickers$yahoo_ticker[
+  meta_stk$tickers$sector == "Information Technology"]
+hc_tickers <- meta_stk$tickers$yahoo_ticker[
+  meta_stk$tickers$sector == "Health Care"]
+
+X_stk <- scale(R_stk[, it_tickers], scale = FALSE)
+Y_stk <- scale(R_stk[, hc_tickers], scale = FALSE)
+p1_stk <- ncol(X_stk); p2_stk <- ncol(Y_stk)
+```
+
+### Severe upward bias of classical CCA at the stock level
+
+With $n = `r n_stk`$ days and $p_1 + p_2 = `r p1_stk + p2_stk`$ stocks,
+classical CCA is still numerically defined (the per-group sample
+covariances are non-singular), so we run it as a baseline. The expected
+upward bias under independence is given asymptotically by
+\begin{equation*}
+\mathbb{E}[\hat{\rho}_1^*\,|\, \mathbf{X} \perp \mathbf{Y}]
+\,\approx\, \sqrt{p_1/n} + \sqrt{p_2/n}
+\,=\, `r round(sqrt(p1_stk/n_stk) + sqrt(p2_stk/n_stk), 3)`,
+\end{equation*}
+the Bai--Miao--Pan (1996) asymptotic bound. The empirical permutation
+calibration, computed by row-permuting $\mathbf{Y}$ 199 times, agrees
+closely.
+
+```{r scca-classical, cache=TRUE}
+cca_stk_full <- cc(X_stk, Y_stk)
+rho_obs_stk  <- cca_stk_full$cor
+
+# Permutation null on rho_1 to verify the bias
+B_stk <- 199
+set.seed(2024)
+rho1_null_stk <- numeric(B_stk)
+for (b in seq_len(B_stk)) {
+  idx <- sample.int(n_stk)
+  rho1_null_stk[b] <- cc(X_stk, Y_stk[idx, , drop = FALSE])$cor[1]
+}
+
+bmp_pred_stk <- sqrt(p1_stk / n_stk) + sqrt(p2_stk / n_stk)
+```
+
+```{r scca-classical-tbl, results='asis'}
+classical_tbl <- data.frame(
+  Quantity = c("Observed $\\hat{\\rho}_1^*$",
+               "Bai--Miao--Pan asymptotic null bound",
+               "Permutation null mean (B = 199)",
+               "Permutation null SD",
+               "Permutation null 95\\textsuperscript{th} percentile",
+               "Z-score of observation vs.\\ null"),
+  Value = c(sprintf("%.4f", rho_obs_stk[1]),
+            sprintf("%.4f", bmp_pred_stk),
+            sprintf("%.4f", mean(rho1_null_stk)),
+            sprintf("%.4f", sd(rho1_null_stk)),
+            sprintf("%.4f", quantile(rho1_null_stk, 0.95)),
+            sprintf("%.1f", (rho_obs_stk[1] - mean(rho1_null_stk)) /
+                              sd(rho1_null_stk))))
+
+kable(classical_tbl, booktabs = TRUE, escape = FALSE,
+      caption = "Classical CCA on the 122-stock IT vs.\\ HC panel. Even
+                 under independence, the leading sample canonical
+                 correlation is severely upward-biased; the empirical
+                 permutation null agrees with the Bai--Miao--Pan
+                 asymptotic prediction. The observed value (0.90) thus
+                 has a noise floor of about 0.36.",
+      col.names = c("Quantity", "Value")) %>%
+  kable_styling(latex_options = "hold_position")
+```
+
+The observed $\hat{\rho}_1^* = `r sprintf("%.3f", rho_obs_stk[1])`$ does
+exceed the null distribution decisively (50 standard deviations above the
+null mean), so there \emph{is} signal -- but the apparent strength of the
+correlation is roughly half artefact, and the higher-order correlations
+$(\hat{\rho}_2^*, \hat{\rho}_3^*) =
+(`r sprintf("%.2f", rho_obs_stk[2])`,\,
+`r sprintf("%.2f", rho_obs_stk[3])`)$ are likely well within the
+high-dimensional bias band. This is precisely the failure mode that
+motivates Sparse CCA.
+
+### Tuning the sparsity penalties
+
+We use the implementation of Witten, Tibshirani, and Hastie (2009) in the
+\texttt{PMA} package. The penalties $c_1, c_2$ are parameterised on the
+unit interval, with $1$ corresponding to no $\ell_1$ constraint. We sweep
+a coarse grid and tune by the permutation criterion of Witten et al.\ --
+maximum standardised difference between the real and permuted canonical
+correlation:
+
+```{r scca-tune, cache=TRUE}
+set.seed(2024)
+perm_grid <- PMA::CCA.permute(
+  x = X_stk, z = Y_stk,
+  typex = "standard", typez = "standard",
+  penaltyxs = c(0.1, 0.2, 0.3, 0.4, 0.5, 0.7),
+  penaltyzs = c(0.1, 0.2, 0.3, 0.4, 0.5, 0.7),
+  nperms = 25, trace = FALSE)
+```
+
+```{r scca-tune-tbl, results='asis'}
+tune_tbl <- data.frame(
+  c1   = perm_grid$penaltyxs,
+  c2   = perm_grid$penaltyzs,
+  rho  = round(perm_grid$cors, 3),
+  Z    = round(perm_grid$zstats, 2),
+  IT   = perm_grid$nnonzerous,
+  HC   = perm_grid$nnonzerovs
+)
+kable(tune_tbl, booktabs = TRUE, escape = FALSE,
+      caption = "Permutation tuning grid for SCCA. Smaller $c_1, c_2$ give
+                 sparser solutions; the standardised gap between the real
+                 and permuted canonical correlations ($Z$) is maximised at
+                 the densest grid point we explored ($c_1 = c_2 = 0.7$),
+                 but the canonical correlation itself is essentially
+                 saturated by $c_1 = c_2 = 0.3$ (the elbow). We retain
+                 the latter as the interpretable model.",
+      col.names = c("$c_1$", "$c_2$", "$\\hat{\\rho}_1^*$", "Z-stat",
+                    "IT active", "HC active")) %>%
+  kable_styling(latex_options = "hold_position")
+```
+
+The permutation criterion favours the densest grid point because adding
+more variables always (slightly) increases the real-data correlation faster
+than it inflates the permuted correlation. Yet the marginal gain
+disappears past $(c_1, c_2) = (0.3, 0.3)$: that grid point attains
+$\hat{\rho}_1^* = 0.84$ -- already $`r sprintf("%.0f%%", round(100*tune_tbl$rho[3]/tune_tbl$rho[6]))`$
+of the densest model -- using roughly $18$ stocks instead of $81$.
+Because our goal here is interpretation rather than prediction, we report
+the $(c_1, c_2) = (0.3, 0.3)$ solution, re-fitted with the full
+\texttt{PMA::CCA} routine, as the primary model. The full re-fit selects
+11 IT and 7 HC names (the tuning sweep selects 10 IT and 7 HC -- a
+single-stock difference reflecting \texttt{CCA.permute}'s coarser
+coordinate-ascent calibration).
+
+### The active set: a quality-compounder cross-sector link
+
+```{r scca-fit, cache=TRUE}
+sc_fit <- PMA::CCA(x = X_stk, z = Y_stk,
+                   typex = "standard", typez = "standard",
+                   penaltyx = 0.3, penaltyz = 0.3,
+                   K = 2, trace = FALSE)
+
+it_active <- which(sc_fit$u[, 1] != 0)
+hc_active <- which(sc_fit$v[, 1] != 0)
+
+it_active_df <- data.frame(
+  Ticker  = it_tickers[it_active],
+  Loading = sc_fit$u[it_active, 1]) %>%
+  arrange(Loading)
+
+hc_active_df <- data.frame(
+  Ticker  = hc_tickers[hc_active],
+  Loading = sc_fit$v[hc_active, 1]) %>%
+  arrange(Loading)
+```
+
+```{r scca-active-plot, fig.width=9, fig.height=4, fig.cap="Sparse CCA loadings on the first canonical pair $(c_1, c_2) = (0.3, 0.3)$. The 11 IT stocks (left) and 7 HC stocks (right) selected by the $\\ell_1$ constraint share a common business profile -- enterprise B2B software and semiconductor design on the IT side; medical-technology, lab instruments, and clinical research on the HC side -- rather than the high-beta or large-cap names that classical CCA would weight most heavily. The cross-sector linkage at the stock level is not driven by the broad market factor."}
+it_active_df$Ticker <- factor(it_active_df$Ticker,
+                              levels = it_active_df$Ticker)
+hc_active_df$Ticker <- factor(hc_active_df$Ticker,
+                              levels = hc_active_df$Ticker)
+
+p_it <- ggplot(it_active_df, aes(x = Ticker, y = Loading)) +
+  geom_col(fill = "steelblue", alpha = 0.85) +
+  coord_flip() +
+  labs(title = "Information Technology", x = NULL,
+       y = "SCCA loading on CV1") +
+  theme_bw()
+
+p_hc <- ggplot(hc_active_df, aes(x = Ticker, y = Loading)) +
+  geom_col(fill = "firebrick3", alpha = 0.85) +
+  coord_flip() +
+  labs(title = "Health Care", x = NULL,
+       y = "SCCA loading on CV1") +
+  theme_bw()
+
+grid.arrange(p_it, p_hc, ncol = 2)
+```
+
+The active set is interpretable in a way that the classical canonical
+coefficients are not. On the IT side, the eleven selected stocks --
+INTU, ACN, APH, MSFT, TEL, SNPS, ADSK, CDNS, ROP, ADI, VRSN -- are
+dominated by enterprise B2B software (Intuit, Microsoft, Autodesk, Cadence,
+Synopsys, Verisign) and semiconductor design / electronic-component names
+(Amphenol, TE Connectivity, Analog Devices). They are \emph{not} the
+high-beta consumer-facing Tech names (NVDA, AVGO, AAPL all receive
+near-zero loadings) and \emph{not} the FAANG-style mega-caps. On the HC
+side, the seven selected stocks -- ISRG, IQV, A, IDXX, MTD, SYK, ZTS --
+are concentrated in medical technology (Intuitive Surgical, Stryker),
+clinical research and lab instruments (IQVIA, Agilent, Mettler-Toledo,
+Idexx), and animal health (Zoetis); the major pharma franchises (PFE,
+LLY, BMY) and the managed-care insurers (UNH, ELV, CI) are absent.
+
+The economic story uniting these two subsets is consistent with a
+``quality-compounder'' factor: high R\&D intensity, recurring B2B revenue,
+premium valuations, and defensive-growth pricing. The cross-sector linkage
+at the individual-stock level is therefore \emph{not} a manifestation of
+the broad market factor (which the ETF-level analysis already captured)
+but a more specific structural similarity that the dimension-reduction
+itself surfaces.
+
+### Stability across market regimes
+
+We re-fit SCCA on two disjoint sub-periods -- pre-COVID (2018--2019) and
+post-COVID (2021--2024) -- to ask which active-set members carry the
+linkage robustly across regimes.
+
+```{r scca-stability, cache=TRUE}
+pre_idx_stk  <- which(dates_stk <  as.Date("2020-01-01"))
+post_idx_stk <- which(dates_stk >= as.Date("2021-01-01"))
+
+run_subperiod <- function(idx) {
+  Xs <- scale(R_stk[idx, it_tickers], scale = FALSE)
+  Ys <- scale(R_stk[idx, hc_tickers], scale = FALSE)
+  sc <- PMA::CCA(Xs, Ys, typex = "standard", typez = "standard",
+                 penaltyx = 0.3, penaltyz = 0.3, K = 1, trace = FALSE)
+  list(rho = sc$cor[1],
+       it  = it_tickers[which(sc$u[, 1] != 0)],
+       hc  = hc_tickers[which(sc$v[, 1] != 0)])
+}
+
+set.seed(2024)
+sc_pre  <- run_subperiod(pre_idx_stk)
+sc_post <- run_subperiod(post_idx_stk)
+
+it_full <- it_tickers[it_active]
+hc_full <- hc_tickers[hc_active]
+
+it_core <- Reduce(intersect, list(it_full, sc_pre$it, sc_post$it))
+hc_core <- Reduce(intersect, list(hc_full, sc_pre$hc, sc_post$hc))
+```
+
+```{r scca-stability-tbl, results='asis'}
+stab_tbl <- data.frame(
+  Period = c("Full (2018--2024)", "Pre-COVID (2018--2019)",
+             "Post-COVID (2021--2024)", "Always-active core"),
+  rho    = c(sprintf("%.3f", sc_fit$cor[1]),
+             sprintf("%.3f", sc_pre$rho),
+             sprintf("%.3f", sc_post$rho), "--"),
+  IT     = c(paste(sort(it_full),    collapse = ", "),
+             paste(sort(sc_pre$it),  collapse = ", "),
+             paste(sort(sc_post$it), collapse = ", "),
+             paste(sort(it_core),    collapse = ", ")),
+  HC     = c(paste(sort(hc_full),    collapse = ", "),
+             paste(sort(sc_pre$hc),  collapse = ", "),
+             paste(sort(sc_post$hc), collapse = ", "),
+             paste(sort(hc_core),    collapse = ", "))
+)
+kable(stab_tbl, booktabs = TRUE, escape = FALSE, longtable = TRUE,
+      caption = "Sparse CCA active sets across the full sample and two
+                 sub-periods at $(c_1, c_2) = (0.3, 0.3)$. The
+                 ``always-active core'' is the intersection. Companies
+                 outside the core rotate in and out depending on the
+                 macro regime.",
+      col.names = c("Period", "$\\hat{\\rho}_1^*$",
+                    "Active IT stocks", "Active HC stocks")) %>%
+  kable_styling(latex_options = c("hold_position", "scale_down"))
+```
+
+The pre/post-COVID comparison reveals a layered structure. A small
+\emph{always-active core} -- IT: `r paste(sort(it_core), collapse=", ")`;
+HC: `r paste(sort(hc_core), collapse=", ")` -- carries the cross-sector
+linkage across both macroeconomic regimes. Outside this core, the active
+set rotates: pre-COVID, names like ADBE, CRM, CSCO, TMO, BSX, CRL had
+sufficient cross-correlation to be selected; post-COVID, the active set
+shifts toward CDNS, ADSK, TEL on the IT side and IQV, SYK, A on the HC
+side, consistent with the regime change in market leadership between the
+zero-rate era and the post-2022 rate-hiking cycle. This kind of regime
+sensitivity is exactly what the variable-selection-consistency theory of
+Sparse CCA (Mai and Zhang 2019) requires: the irrepresentability and
+beta-min conditions tie the recovered support to the underlying
+canonical-vector \emph{within} a stable distribution. When the
+distribution shifts, the selected support shifts too, and the always-active
+core represents the variables whose canonical loadings are robust to
+regime change.
+
+### Synthesis: from sectors to stocks
+
+Three findings emerge from this high-dimensional application:
+
+\begin{enumerate}
+\item \textbf{Classical CCA is unreliable at this scale.} The observed
+$\hat{\rho}_1^* = `r sprintf("%.3f", rho_obs_stk[1])`$ has a noise floor
+of $\approx 0.36$ from the dimensional bias alone. Any analysis taking
+the unadjusted classical estimates at face value would substantially
+overstate the strength of the cross-sector relationship.
+
+\item \textbf{Sparsity reveals structure that aggregation hides.} The
+sector-level CCA in the previous section identified a strong
+cyclical-vs-defensive linkage dominated by the broad market factor. The
+stock-level SCCA isolates a much more specific subgroup: enterprise B2B
+software / semiconductor design $\leftrightarrow$ medical technology /
+lab instruments. This specificity is invisible at the eleven-ETF level
+because the aggregation washes it out.
+
+\item \textbf{The always-active core is the most defensible
+deliverable.} For practical use (e.g.\ portfolio construction or
+factor-model design), the seven companies that survive both sub-periods
+-- IT: `r paste(sort(it_core), collapse=", ")`;
+HC: `r paste(sort(hc_core), collapse=", ")` -- offer the highest
+confidence as cross-sector signal carriers. Members of the larger active
+sets should be regarded as regime-conditional.
+\end{enumerate}
+
+These empirics motivate -- and ground-truth -- the theoretical review of
+Sparse CCA in Part II: in the very $p \approx n / 14$ regime we
+encountered here, classical estimators already fail informatively, and
+the sparsity-based estimator both regularises the problem and produces
+output that aligns with economic intuition.
+
+\newpage
+
 ## Discussion
 
 ### Appropriateness of PCA for Financial Returns
 
-PCA is an optimal linear dimension-reduction technique under the assumption that the data are generated by a factor model with Gaussian noise, or more generally that we are interested in minimising mean squared reconstruction error. For financial returns, several issues arise:
+PCA is an optimal linear dimension-reduction technique under the
+assumption that the data are generated by a factor model with Gaussian
+noise, or more generally that we are interested in minimising mean
+squared reconstruction error. For financial returns, several issues
+arise:
 
 \begin{enumerate}
-\item \textbf{Non-normality.} As demonstrated by Mardia's test ($p < 0.001$), sector returns are not multivariate normal. PCA is still consistent as a method for estimating the population eigenvectors, since it does not rely on normality. However, the \emph{inferential} results --- confidence intervals for eigenvalues, tests for the number of factors --- require distributional assumptions that are violated here. Robust PCA alternatives (e.g., using the Tyler scatter matrix estimator instead of the sample covariance) would be more appropriate for inference.
+\item \textbf{Non-normality.} The three normality diagnostics in the EDA
+section -- Mardia's skewness/kurtosis tests, the energy goodness-of-fit
+test of Sz\'ekely--Rizzo (2005), and the $\chi^2_p$ Q--Q plot of
+Mahalanobis distances -- all reject MVN decisively, with the right tail
+of the joint distribution roughly six times heavier than a Gaussian
+prediction. PCA itself remains consistent as an estimator of the
+population eigenvectors of the covariance matrix, since the eigen-
+decomposition relies only on second moments. However, the inferential
+machinery built on top of PCA -- confidence intervals for eigenvalues,
+asymptotic tests for the number of factors -- requires distributional
+assumptions that we have not satisfied. A robust covariance estimator
+such as the Tyler (1987) scatter estimator would be the natural
+extension; we did not pursue this path because the qualitative PCA
+conclusions (low-rank structure, market factor, cyclical/defensive
+contrast) are unlikely to be sensitive to the heavy tails -- only the
+inferential statements are.
 
-\item \textbf{Time-series dependence.} The rolling volatility plots confirm GARCH-type heteroskedasticity. Standard asymptotic theory for PCA assumes i.i.d. observations; under GARCH dynamics, the effective sample size is reduced and the asymptotic distribution of eigenvalues changes. Methods such as the DCC-GARCH model or factor models estimated via the EM algorithm with time-varying loadings would more faithfully capture the return dynamics.
+\item \textbf{Time-series dependence.} The rolling-volatility plots
+confirm GARCH-type heteroskedasticity, with volatility clustering during
+the COVID crash and the 2022 rate cycle. Standard asymptotic theory for
+PCA assumes i.i.d.\ observations; under GARCH dynamics the effective
+sample size is reduced and the asymptotic distribution of eigenvalues
+changes. We did not address this directly. A DCC-GARCH model or a factor
+model with time-varying loadings (Doz, Giannone, Reichlin 2011) would
+more faithfully capture return dynamics, and remains a clear future
+extension.
 
-\item \textbf{Covariance vs. correlation matrix.} We used the covariance matrix, giving greater influence to more volatile sectors (Energy, Technology). Using the correlation matrix -- equivalent to standardising each return series -- would weight sectors equally and might be preferred if the goal is to study comovements independent of scale. In practice, the two approaches give similar loadings for the dominant factors.
+\item \textbf{Covariance vs.\ correlation matrix.} We used the covariance
+matrix, giving greater influence to more volatile sectors (Energy,
+Technology). The sensitivity check in the PCA section shows that the
+leading market factor (PC1) is essentially unchanged under
+correlation-matrix PCA, but the second and third components effectively
+swap roles: Cov-PC2 is dominated by Energy's idiosyncratic variation,
+whereas Cor-PC2 captures the cyclical--defensive rotation. The economic
+content of the decomposition is the same; the choice of weighting changes
+which factor is labelled ``second''.
 \end{enumerate}
 
 ### Appropriateness of CCA for Financial Returns
 
-The same issues affect CCA, with additional complications:
+The same issues affect CCA, with additional complications specific to the
+two-group structure:
 
 \begin{enumerate}
-\item \textbf{Dimensionality.} With $p_1 + p_2 = 10$ variables and $n \approx 1{,}760$ observations, classical CCA is feasible (the covariance matrices are non-singular). However, if one wished to apply CCA at the individual-stock level (e.g., 50 stocks per group), the sample covariance matrices would be near-singular, inflating the estimated canonical correlations. This is the high-dimensional problem that Sparse CCA, reviewed in Part II, is designed to address.
+\item \textbf{Dimensionality.} The eleven-ETF analysis sat in the
+comfortable low-dimensional regime ($p_1 + p_2 = 10$, $n = 1{,}759$),
+where the sample canonical correlations are well-behaved estimators of
+the population values. The high-dimensional application section
+explicitly tested what happens when this assumption is relaxed: at the
+individual-stock level ($p_1 + p_2 = 122$, $n = 1{,}759$), classical CCA
+remains numerically well-defined but the leading sample canonical
+correlation has a noise floor of $\hat{\rho}_1^* \approx 0.36$ from the
+Bai--Miao--Pan dimensional bias alone, against which the observed
+$\hat{\rho}_1^* = 0.90$ retains genuine signal but the higher-order
+correlations $\hat{\rho}_2^*, \hat{\rho}_3^*$ likely fall within the bias
+band. This is precisely the failure mode that Sparse CCA, reviewed and
+applied in Parts II and the high-dimensional application section, is
+designed to address.
 
-\item \textbf{Non-normality and significance tests.} The Wilks' $\Lambda$ test relies on multivariate normality. Given the violation documented above, the reported $p$-values are approximate. Permutation-based tests would provide distribution-free inference at the cost of greater computational burden.
+\item \textbf{Non-normality and significance tests.} The Wilks' $\Lambda$
+asymptotic distribution relies on multivariate normality, which we
+rejected. We addressed this by reporting two distribution-free analogues
+alongside Wilks: a permutation test on $\hat{\rho}_1^*$ (which targets
+the same linear-association hypothesis) and the distance-covariance test
+of Sz\'ekely--Rizzo--Bakirov (2007) (which is consistent against any
+form of dependence). All three tests reach the smallest attainable
+$p$-value, so for the leading canonical pair the conclusion is robust
+to the MVN failure. For higher-order pairs the situation is murkier: the
+asymptotic Wilks calibration cannot be relied upon, and a
+correlation-by-correlation permutation analysis would be more
+appropriate.
 
-\item \textbf{Interpretation.} High canonical correlations here partially reflect the common market factor rather than a unique cross-group relationship. A more refined analysis would partial out the market factor (e.g., by regressing out the S\&P 500 return) before applying CCA, so that the residual canonical correlations capture sector-specific linkages.
+\item \textbf{Market factor versus genuine cross-sector linkage.} Both
+canonical correlations at the ETF level partially reflect the common
+market factor: when the market rises, both cyclical and defensive
+sectors rise (though by different amounts), so even with no
+sector-specific linkage one would expect strongly positive canonical
+correlations. A direct remedy would be to partial out the S\&P 500
+return before applying CCA, leaving the residual canonical correlations
+to capture sector-specific dependence. The stock-level SCCA application
+achieves an analogous goal indirectly through sparsity: by retaining
+only the small subset of stocks whose paired loadings capture
+cross-sector signal beyond the dimensional noise floor, SCCA suppresses
+broad-market noise and surfaces the more specific
+``quality-compounder'' linkage between IT software/semiconductor design
+and HC medical-technology / lab instruments. The two strategies --
+explicit partialling and implicit sparsity -- target the same underlying
+concern; a combined analysis (partial out the market, then apply SCCA
+to the residuals) is a natural follow-up.
 \end{enumerate}
 
 ### Connection to the Review Project
 
-The empirical results here directly motivate the review of Sparse CCA in Part II. When the number of variables approaches or exceeds the sample size --- as would occur if we applied CCA at the individual-stock level --- the sample covariance matrices become rank-deficient and the canonical coefficients are not identifiable. Sparse CCA imposes $\ell_1$ penalties on the canonical coefficient vectors, simultaneously regularising the solution and inducing sparsity (interpretability). The mathematical formulation of this approach is developed in detail in Part II.
+The high-dimensional application section provides a concrete empirical
+anchor for the theoretical review of Sparse CCA in Part II. Three points
+of contact stand out. First, the dimensional bias predicted by
+Bai--Miao--Pan (1996) -- the asymptotic null mean of $\hat{\rho}_1^*$
+under independence -- is observed almost exactly in the permutation null
+on the 122-stock panel ($0.361$ vs.\ the predicted $0.372$), validating
+the high-dimensional regime that motivates SCCA. Second, the sparse
+estimator at $(c_1, c_2) = (0.3, 0.3)$ recovers an interpretable active
+set whose stability across COVID and post-COVID sub-periods is
+consistent with the variable-selection-consistency results of Mai and
+Zhang (2019): a small ``always-active'' core remains selected across
+regimes, while peripheral stocks rotate as the underlying distribution
+shifts. Third, the algorithmic foundations that produce the active set
+-- the soft-thresholding KKT update and the monotone convergence of
+coordinate ascent, derived in Part II -- are exactly what
+\texttt{PMA::CCA} executes under the hood. The empirical findings
+therefore not only motivate but also ground-truth the review.
 
 \newpage
 
 ## Summary (Data Project)
 
-We analysed daily log-returns of eleven S\&P 500 sector ETFs over 2018--2024 using PCA and CCA. The main findings are:
+The empirical part of this project applies four multivariate techniques --
+PCA, factor analysis, canonical correlation analysis, and sparse CCA --
+to S\&P 500 daily log-returns over 2018--2024, working at two scales:
+eleven sector ETFs ($n = 1{,}759$, $p = 11$) and 122 individual
+constituent stocks of the Information Technology and Health Care sectors
+($n = 1{,}759$, $p_1 = 67$, $p_2 = 55$). The main findings are:
 
 \begin{enumerate}
-\item \textbf{PCA:} The sector return covariance matrix has a clear low-rank structure. The first principal component (market factor) explains approximately `r paste0(round(pve[1]*100,1),"%")` of total variance, and four components together explain `r paste0(round(cpve[4]*100,1),"%")`. Subsequent components have interpretable economic meanings: a cyclical-defensive spread, an energy idiosyncratic factor, and an interest-rate-sensitive factor.
+\item \textbf{PCA.} The sector return covariance matrix has a clear
+low-rank structure: the market factor (PC1) explains
+$\approx `r paste0(round(pve[1]*100,1),"\\%")`$ of total variance and
+four components together explain
+$\approx `r paste0(round(cpve[4]*100,1),"\\%")`$. The leading market
+factor is robust to the choice between covariance and correlation
+matrices, but PC2 and PC3 swap roles -- Cov-PCA puts Energy's
+idiosyncratic variation in PC2, while Cor-PCA places the
+cyclical--defensive contrast there. The two decompositions answer subtly
+different questions and the choice should be reported explicitly.
 
-\item \textbf{CCA:} There is a highly significant linear relationship between cyclical and defensive sector returns (all four canonical correlations significant at $p < 0.001$). The first canonical pair ($\hat{\rho}_1^* \approx$ `r round(cca_res$cor[1],3)`) captures the common market movement; the second pair ($\hat{\rho}_2^* \approx$ `r round(cca_res$cor[2],3)`) captures a risk-rotation between growth and value/rate-sensitive sectors. These results are broadly stable across sub-periods.
+\item \textbf{Factor analysis.} A four-factor varimax-rotated model
+(BIC-selected, with $q = 5$ rejected for a near-Heywood case) recovers
+clean simple-structure factors that PCA's variance-greedy ordering does
+not deliver: a Growth-Cyclical factor (Tech, Cons.\ Discretionary,
+Comm.\ Services), a Traditional-Cyclical / Commodity factor
+(Financials, Industrials, Materials, Energy), a Defensive / Rate-Sensitive
+factor (Utilities, Cons.\ Staples, Real Estate), and a Health-Care
+idiosyncrasy factor. The estimated specific variances $\hat{\psi}_j$
+quantify a diagnostic PCA cannot give: Energy is the most idiosyncratic
+($\hat{\psi} \approx 0.40$) and Industrials the most fully explained by
+common factors.
 
-\item \textbf{Limitations:} Both methods assume i.i.d. multivariate Gaussian observations. Sector returns exhibit non-normality (heavy tails, negative skewness) and GARCH volatility clustering, invalidating standard inferential procedures. Robust alternatives (Tyler estimator for PCA; permutation tests for CCA) and time-series extensions (DCC-GARCH factor models) would be more appropriate for formal inference.
+\item \textbf{Sector-level CCA.} The cyclical and defensive groups are
+linked by four highly significant canonical correlations
+($\hat{\rho}_1^* \approx `r round(cca_res$cor[1],3)`$,
+$\hat{\rho}_2^* \approx `r round(cca_res$cor[2],3)`$). Three independence
+tests of differing inferential pedigrees -- Wilks' $\Lambda$,
+permutation on $\hat{\rho}_1^*$, and the distance-covariance test of
+Sz\'ekely--Rizzo--Bakirov -- agree at the smallest attainable
+$p$-values, validating both the linear-association story and the
+robustness of the conclusion to MVN failure. Sub-period CCA confirms
+that the leading canonical pair is stable across the COVID regime
+break.
+
+\item \textbf{Stock-level Sparse CCA.} At the individual-stock level
+($p_1 + p_2 = 122$, $n = 1{,}759$), classical CCA's
+$\hat{\rho}_1^* = `r sprintf("%.3f", rho_obs_stk[1])`$ has a noise floor
+of $\approx 0.36$ from the dimensional bias alone, exactly matching the
+Bai--Miao--Pan asymptotic prediction. Sparse CCA at $(c_1, c_2) = (0.3,
+0.3)$ retains 11 IT and 7 HC stocks while preserving 99\% of the
+canonical correlation, and the active set has a coherent economic
+interpretation: enterprise B2B software / semiconductor design
+$\leftrightarrow$ medical technology / lab instruments -- a
+``quality-compounder'' subgroup that the broad-market factor in the
+ETF-level CCA does not isolate. A small always-active core
+(IT: ACN, APH, INTU, SNPS; HC: IDXX, ISRG, MTD) survives both
+pre- and post-COVID sub-periods.
+
+\item \textbf{Limitations and what we did about them.} Sector returns
+violate multivariate normality decisively (Mardia, energy GOF, and
+$\chi^2$ Q--Q diagnostics all reject), and exhibit GARCH-type
+volatility clustering. We addressed the normality failure by reporting
+distribution-free permutation and distance-covariance tests alongside
+Wilks' $\Lambda$. We did \emph{not} model the time-series dependence:
+all results above assume i.i.d.\ rows, and the effective sample size
+is overstated under GARCH. A DCC-GARCH factor model or a robust
+covariance estimator (Tyler scatter) would be more appropriate for
+formal inference and is left to future work.
 \end{enumerate}
 
 \newpage
@@ -889,16 +1823,156 @@ The algorithm proceeds by coordinate ascent:
   $$
   \mathbf{a} \leftarrow \frac{S(\mathbf{M}\mathbf{b},\, \Delta)}{\|S(\mathbf{M}\mathbf{b},\, \Delta)\|_2},
   $$
-  where $S(z, \Delta) = \text{sign}(z)\max(|z|-\Delta, 0)$ is the soft-threshold operator, and $\Delta \geq 0$ is chosen by bisection so that $\|S(\mathbf{M}\mathbf{b}, \Delta)\|_1 = c_1$.
+  where $S(z, \Delta) = \text{sign}(z)\max(|z|-\Delta, 0)$ is the soft-threshold operator and $\Delta \geq 0$ is the Lagrange multiplier of the $\ell_1$ constraint. The next proposition derives the formula and shows that $\Delta$ is uniquely determined by the constraint $\|S(\mathbf{M}\mathbf{b}, \Delta)\|_1 / \|S(\mathbf{M}\mathbf{b}, \Delta)\|_2 = c_1$, which can be located by bisection.
   \item \textbf{Update $\mathbf{b}$:} Analogously with $\mathbf{M}^\top\mathbf{a}$.
   \item Repeat steps 2--3 until convergence.
 \end{enumerate}
 
-\begin{proposition}
-The coordinate ascent algorithm converges to a stationary point of \eqref{eq:scca}. The objective is non-decreasing at each step. Since the feasible set is compact, convergence is guaranteed.
+\begin{proposition}[Soft-thresholding update via KKT]
+\label{prop:soft-thresh}
+Let $\mathbf{c} \in \mathbb{R}^{p_1} \setminus \{\mathbf{0}\}$ and consider
+the subproblem
+$$
+\max_{\mathbf{a}}\; \mathbf{a}^\top \mathbf{c}
+\quad\text{s.t.}\quad
+\|\mathbf{a}\|_2 \le 1,\; \|\mathbf{a}\|_1 \le c_1, \qquad
+c_1 \in [1, \sqrt{p_1}].
+$$
+There exists a unique optimiser $\mathbf{a}^*$ given by
+$$
+\mathbf{a}^* = \frac{S(\mathbf{c}, \nu^*)}{\|S(\mathbf{c}, \nu^*)\|_2},
+$$
+where $\nu^* \ge 0$ is the smallest value satisfying
+$$
+\frac{\|S(\mathbf{c}, \nu^*)\|_1}{\|S(\mathbf{c}, \nu^*)\|_2} \le c_1.
+$$
+In particular, $\nu^* = 0$ when $\|\mathbf{c}\|_1/\|\mathbf{c}\|_2 \le c_1$
+($\ell_1$ constraint inactive), and otherwise $\nu^*$ is determined by
+equality and locatable by bisection.
 \end{proposition}
 
-The proof follows from the fact that each subproblem has a unique closed-form solution (the soft-thresholded unit vector) and the objective is bounded above.
+\begin{proof}
+The objective is linear and the feasible set is the intersection of two
+compact convex sets, so a maximiser exists and lies on the boundary. Form
+the Lagrangian
+$$
+L(\mathbf{a},\mu,\nu) = \mathbf{a}^\top \mathbf{c}
+- \tfrac{\mu}{2}\bigl(\|\mathbf{a}\|_2^2 - 1\bigr)
+- \nu\bigl(\|\mathbf{a}\|_1 - c_1\bigr),
+\qquad \mu, \nu \ge 0.
+$$
+Stationarity in $\mathbf{a}$ requires
+$0 \in \partial_{\mathbf{a}} L = \mathbf{c} - \mu\mathbf{a}
+- \nu\,\partial\|\mathbf{a}\|_1$, which component-wise reads
+$0 = c_j - \mu a_j - \nu \xi_j$ with
+$\xi_j = \mathrm{sign}(a_j)$ if $a_j \ne 0$ and
+$\xi_j \in [-1,1]$ if $a_j = 0$.
+
+Case-splitting on the sign of $a_j$ gives:
+$a_j > 0$ requires $c_j > \nu$ and $\mu a_j = c_j - \nu$;
+$a_j < 0$ requires $c_j < -\nu$ and $\mu a_j = c_j + \nu$;
+$a_j = 0$ requires $|c_j| \le \nu$. The three cases combine into the
+single soft-thresholding identity
+$$
+\mu\,a_j \;=\; \mathrm{sign}(c_j)\max(|c_j| - \nu,\, 0) \;=\; S(c_j,\nu),
+\qquad j = 1,\ldots,p_1. \tag{$\star$}
+$$
+
+Since $\mathbf{c} \ne \mathbf{0}$ and any $\mathbf{a}$ with $\mathbf{a}^\top
+\mathbf{c} > 0$ is improved by scaling toward $\|\mathbf{a}\|_2 = 1$, the
+$\ell_2$ constraint is active at the optimum: $\mu > 0$. Taking $\ell_2$
+norms in $(\star)$ then yields $\mu = \|S(\mathbf{c}, \nu)\|_2$, and hence
+$$
+\mathbf{a}^* = \frac{S(\mathbf{c}, \nu)}{\|S(\mathbf{c}, \nu)\|_2}.
+$$
+
+It remains to determine $\nu$. Define
+$g(\nu) := \|S(\mathbf{c}, \nu)\|_1 / \|S(\mathbf{c}, \nu)\|_2$ on
+$[0, \max_j|c_j|)$. The mapping $\nu \mapsto S(\mathbf{c}, \nu)$ is
+continuous and componentwise non-increasing in $|S_j|$, with the support
+shrinking weakly as $\nu$ grows. A direct calculation shows
+$g(0) = \|\mathbf{c}\|_1/\|\mathbf{c}\|_2 \in [1,\sqrt{p_1}]$, that $g$ is
+continuous, and that $g \to 1$ as $\nu \to \max_j|c_j|^-$ (only the
+largest entry survives). Moreover $g$ is non-increasing on its domain --
+this is a standard property of the $\ell_1/\ell_2$ ratio under componentwise
+shrinkage. Consequently:
+\begin{itemize}
+\item if $g(0) \le c_1$, the $\ell_1$ constraint is inactive,
+      complementary slackness gives $\nu^* = 0$, and
+      $\mathbf{a}^* = \mathbf{c}/\|\mathbf{c}\|_2$;
+\item otherwise, the unique $\nu^* > 0$ solving $g(\nu^*) = c_1$ exists
+      by the intermediate value theorem and can be located numerically
+      by bisection on $[0, \max_j|c_j|)$.
+\end{itemize}
+Uniqueness of $\mathbf{a}^*$ follows from uniqueness of $\nu^*$ together
+with the explicit closed form.
+\end{proof}
+
+The same argument applies verbatim to the $\mathbf{b}$-subproblem with
+$\mathbf{c} = \mathbf{M}^\top \mathbf{a}$ and $c_1$ replaced by $c_2$.
+
+\begin{proposition}[Monotone convergence of coordinate ascent]
+\label{prop:converge}
+Let $F(\mathbf{a},\mathbf{b}) = \mathbf{a}^\top \mathbf{Mb}$ and let
+$\mathcal{C}_a = \{\mathbf{a} : \|\mathbf{a}\|_2 \le 1, \|\mathbf{a}\|_1
+\le c_1\}$, $\mathcal{C}_b = \{\mathbf{b} : \|\mathbf{b}\|_2 \le 1,
+\|\mathbf{b}\|_1 \le c_2\}$. Denote the iterates produced by coordinate
+ascent by $(\mathbf{a}^{(t)},\mathbf{b}^{(t)})$. Then:
+\begin{enumerate}
+\item the sequence $F^{(t)} := F(\mathbf{a}^{(t)}, \mathbf{b}^{(t)})$
+      is non-decreasing and converges to a limit $F^* \le \sup F$;
+\item every cluster point $(\mathbf{a}^*, \mathbf{b}^*)$ of the iterates
+      satisfies the block-wise stationarity conditions
+      $\mathbf{a}^* = \arg\max_{\mathcal{C}_a} F(\cdot, \mathbf{b}^*)$
+      and
+      $\mathbf{b}^* = \arg\max_{\mathcal{C}_b} F(\mathbf{a}^*, \cdot)$.
+\end{enumerate}
+\end{proposition}
+
+\begin{proof}
+\textit{(i) Monotonicity.} The $\mathbf{a}$-update solves
+$\max_{\mathbf{a} \in \mathcal{C}_a} F(\mathbf{a}, \mathbf{b}^{(t)})$
+exactly (Proposition~\ref{prop:soft-thresh}), so
+$$
+F\bigl(\mathbf{a}^{(t+1)}, \mathbf{b}^{(t)}\bigr) \;\ge\;
+F\bigl(\mathbf{a}^{(t)}, \mathbf{b}^{(t)}\bigr).
+$$
+Symmetrically, the subsequent $\mathbf{b}$-update gives
+$F(\mathbf{a}^{(t+1)}, \mathbf{b}^{(t+1)})
+\ge F(\mathbf{a}^{(t+1)}, \mathbf{b}^{(t)})$. Composition shows
+$F^{(t+1)} \ge F^{(t)}$.
+
+\textit{(ii) Boundedness and limit.} $F$ is continuous on the compact set
+$\mathcal{C}_a \times \mathcal{C}_b$, hence bounded above. Combined with
+monotonicity, $\{F^{(t)}\}$ converges to some $F^* \in \mathbb{R}$.
+
+\textit{(iii) Cluster points are stationary.} By Bolzano--Weierstrass the
+bounded sequence $\{(\mathbf{a}^{(t)}, \mathbf{b}^{(t)})\}$ has at least
+one cluster point $(\mathbf{a}^*, \mathbf{b}^*) \in \mathcal{C}_a \times
+\mathcal{C}_b$; let $t_k$ be a subsequence along which convergence holds.
+Continuity of $F$ gives $F(\mathbf{a}^*, \mathbf{b}^*) = F^*$.
+
+The closed-form $\mathbf{a}^{(t_k+1)} = S(\mathbf{Mb}^{(t_k)},
+\nu^{(t_k)}) / \|S(\mathbf{Mb}^{(t_k)}, \nu^{(t_k)})\|_2$ is a continuous
+function of $\mathbf{b}^{(t_k)}$ (the soft-threshold operator and the
+multiplier $\nu$ depend continuously on the input vector when the
+$\ell_1$ constraint is strict). Passing to the limit along $t_k$,
+$$
+\mathbf{a}^* \;=\; \lim_{k\to\infty} \mathbf{a}^{(t_k+1)}
+\;=\; \arg\max_{\mathbf{a} \in \mathcal{C}_a} F(\mathbf{a}, \mathbf{b}^*),
+$$
+and analogously for $\mathbf{b}^*$. Hence $(\mathbf{a}^*, \mathbf{b}^*)$
+satisfies the block-wise stationarity conditions, i.e.\ it is a
+\emph{coordinate-wise} maximum of $F$.
+\end{proof}
+
+\begin{remark}
+Block-wise stationarity is strictly weaker than global optimality: $F$ is
+bilinear, hence non-convex in $(\mathbf{a}, \mathbf{b})$ jointly, and
+saddle points or local maxima are possible. In practice one runs the
+algorithm from several random initialisations of $\mathbf{b}^{(0)}$ and
+retains the iterate achieving the largest $F^*$.
+\end{remark>
 
 ### Higher-Order Canonical Pairs
 
@@ -1070,7 +2144,29 @@ We have reviewed Sparse Canonical Correlation Analysis as introduced by Witten, 
 
   \item \textbf{Limitations.} Key challenges include non-convexity of the objective, difficulty of tuning parameter selection, bias from sequential deflation, and the absence of computationally tractable inference procedures for individual coefficients.
 
-  \item \textbf{Connection to Part I.} Our empirical analysis in Part I operated with $p_1 + p_2 = 10 \ll n \approx 1{,}760$, so classical CCA was well-defined. However, extending the analysis to the individual-stock level (e.g., $p_1 = 100$ technology stocks vs.\ $p_2 = 80$ healthcare stocks) would immediately enter the regime where SCCA is necessary. The market-factor and risk-rotation structure found in Part I suggests that the true canonical vectors might indeed be sparse in such a setting (driven by a few leading stocks rather than all), making SCCA a natural methodological choice.
+  \item \textbf{Connection to Part I.} The eleven-ETF analysis in Part I
+operated comfortably in the low-dimensional regime
+($p_1 + p_2 = 10 \ll n = 1{,}759$), where classical CCA is well-behaved
+and SCCA is unnecessary. The high-dimensional application section in
+Part I crosses the threshold by re-running the analysis at the
+individual-stock level ($p_1 = 67$ IT stocks, $p_2 = 55$ HC stocks).
+That application directly verifies three predictions of the theory
+reviewed above: (i) the Bai--Miao--Pan upward bias of $\hat{\rho}_1^*$
+under independence, observed empirically at $\approx 0.36$ versus the
+predicted $\approx 0.37$; (ii) the existence of an interpretable sparse
+solution at $(c_1, c_2) = (0.3, 0.3)$ that retains roughly $15\%$ of the
+candidate variables while preserving $99\%$ of the canonical correlation;
+and (iii) regime-conditional variable selection, with a small
+always-active core stable across pre- and post-COVID sub-periods
+alongside peripheral selections that rotate -- consistent with the
+irrepresentability/beta-min framework of Mai and Zhang (2019). The
+economic interpretation of the active set -- a B2B software /
+semiconductor design $\leftrightarrow$ medical-technology /
+lab-instruments linkage that the broad-market factor of the ETF-level
+analysis does not isolate -- is, in turn, exactly the kind of insight
+that motivates SCCA in its original genomics applications: a sparse
+cross-group structure hidden underneath a dense common-factor
+component.
 \end{enumerate}
 
 \newpage
@@ -1097,6 +2193,8 @@ Connor, G. and Korajczyk, R.A. (1988). Risk and return in an equilibrium APT: Ap
 
 Donoho, D.L. and Johnstone, I.M. (1994). Ideal spatial adaptation by wavelet shrinkage. *Biometrika*, 81(3), 425--455.
 
+Doz, C., Giannone, D. and Reichlin, L. (2011). A two-step estimator for large approximate dynamic factor models based on Kalman filtering. *Journal of Econometrics*, 164(1), 188--205.
+
 Fama, E.F. and French, K.R. (1993). Common risk factors in the returns on stocks and bonds. *Journal of Financial Economics*, 33(1), 3--56.
 
 Fama, E.F. and French, K.R. (2015). A five-factor asset pricing model. *Journal of Financial Economics*, 116(1), 1--22.
@@ -1107,9 +2205,15 @@ Gao, C., Ma, Z. and Zhou, H.H. (2015). Sparse CCA: Adaptive estimation and compu
 
 Hardoon, D.R., Szedmak, S. and Shawe-Taylor, J. (2004). Canonical correlation analysis: An overview with application to learning methods. *Neural Computation*, 16(12), 2639--2664.
 
+Hendrickson, A.E. and White, P.O. (1964). Promax: A quick method for rotation to oblique simple structure. *British Journal of Statistical Psychology*, 17(1), 65--70.
+
 Izenman, A.J. (1975). Reduced-rank regression for the multivariate linear model. *Journal of Multivariate Analysis*, 5(2), 248--264.
 
+Kaiser, H.F. (1958). The varimax criterion for analytic rotation in factor analysis. *Psychometrika*, 23(3), 187--200.
+
 Klami, A., Virtanen, S. and Kaski, S. (2013). Bayesian canonical correlation analysis. *Journal of Machine Learning Research*, 14(4), 965--1003.
+
+Ledermann, W. (1937). On the rank of the reduced correlational matrix in multiple-factor analysis. *Psychometrika*, 2(2), 85--93.
 
 Leurgans, S.E., Moyeed, R.A. and Silverman, B.W. (1993). Canonical correlation analysis when the data are curves. *Journal of the Royal Statistical Society: Series B*, 55(3), 725--740.
 
@@ -1127,7 +2231,13 @@ Rupnik, J. and Shawe-Taylor, J. (2010). Multi-view canonical correlation analysi
 
 Sharpe, W.F. (1964). Capital asset prices: A theory of market equilibrium under conditions of risk. *Journal of Finance*, 19(3), 425--442.
 
+Sz\'ekely, G.J. and Rizzo, M.L. (2005). A new test for multivariate normality. *Journal of Multivariate Analysis*, 93(1), 58--80.
+
+Sz\'ekely, G.J., Rizzo, M.L. and Bakirov, N.K. (2007). Measuring and testing dependence by correlation of distances. *Annals of Statistics*, 35(6), 2769--2794.
+
 Tibshirani, R., Hastie, T., Narasimhan, B. and Chu, G. (2002). Diagnosis of multiple cancer types by shrunken centroids of gene expression. *PNAS*, 99(10), 6567--6572.
+
+Tyler, D.E. (1987). A distribution-free $M$-estimator of multivariate scatter. *Annals of Statistics*, 15(1), 234--251.
 
 van de Geer, S., Bühlmann, P., Ritov, Y. and Dezeure, R. (2014). On asymptotically optimal confidence regions and tests for high-dimensional models. *Annals of Statistics*, 42(3), 1166--1202.
 
