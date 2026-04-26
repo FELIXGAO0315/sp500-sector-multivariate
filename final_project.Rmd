@@ -2204,7 +2204,7 @@ This is a stronger requirement than estimation consistency. Small $\ell_2$ error
 automatically imply exact support recovery unless the nonzero coefficients are separated
 from zero.
 
-\begin{theorem}[Support recovery in sparse CCA; Laha and Mukherjee, 2023]
+\begin{theorem}[Support recovery in sparse CCA; Laha and Mukherjee, 2022]
 For high-dimensional sparse CCA, exact support recovery is possible only under additional
 sample-size and signal-strength conditions. In particular, if the sparsity levels are not too
 large relative to $n$ and $p_1+p_2$, and the minimum nonzero entries of the canonical vectors
@@ -2215,7 +2215,7 @@ is information-theoretically impossible.
 
 Thus, variable selection consistency should not be presented as a direct consequence of the
 usual SCCA consistency theorem. It requires separate support-recovery theory. Laha and
-Mukherjee (2023) give such a theory: they define successful support recovery as exact recovery
+Mukherjee (2022) give such a theory: they define successful support recovery as exact recovery
 with probability tending to one, identify sparsity regimes where recovery is possible, and show
 that sufficiently large minimum nonzero entries are necessary for asymptotically consistent
 support recovery.
@@ -2400,91 +2400,96 @@ component.
 
 # References
 
-Anderson, T.W. (1951). Estimating linear restrictions on regression coefficients for multivariate normal distributions. *Annals of Mathematical Statistics*, 22(3), 327--351.
+Anderson, T.W. (1951). Estimating linear restrictions on regression coefficients for multivariate normal distributions. *Annals of Mathematical Statistics*, 22(3), 327-351.
 
 Attié, A.P. and Roache, S.K. (2009). Inflation hedging for long-term investors. IMF Working Paper.
 
 Bach, F. R., & Jordan, M. I. (2005). A probabilistic interpretation of canonical correlation analysis.
 
-Bai, Z., Miao, B. and Pan, G. (1996). On asymptotics of eigenvectors of large sample covariance matrix. *Annals of Probability*, 35(4), 1532--1572.
+Bai, Z., Miao, B. and Pan, G. (1996). On asymptotics of eigenvectors of large sample covariance matrix. *Annals of Probability*, 35(4), 1532-1572.
 
-Bai, J. and Ng, S. (2002). Determining the number of factors in approximate factor models. *Econometrica*, 70(1), 191--221.
+Bai, J. and Ng, S. (2002). Determining the number of factors in approximate factor models. *Econometrica*, 70(1), 191-221.
 
-Bracker, K. and Koch, P.D. (1999). Economic determinants of the correlation structure across international equity markets. *Journal of Economics and Business*, 51(6), 443--471.
+Bracker, K. and Koch, P.D. (1999). Economic determinants of the correlation structure across international equity markets. *Journal of Economics and Business*, 51(6), 443-471.
 
-Carroll, J.D. (1968). A generalization of canonical correlation analysis to three or more sets of variables. *Proceedings of the 76th Annual Convention of the APA*, 3, 227--228.
+Carroll, J.D. (1968). A generalization of canonical correlation analysis to three or more sets of variables. *Proceedings of the 76th Annual Convention of the APA*, 3, 227-228.
 
-Chen, M. and Huang, J. (2012). Sparse reduced-rank regression for simultaneous dimension reduction and variable selection. *Journal of the American Statistical Association*, 107(500), 1533--1545.
+Chen, M. and Huang, J. (2012). Sparse reduced-rank regression for simultaneous dimension reduction and variable selection. *Journal of the American Statistical Association*, 107(500), 1533-1545.
 
 Chu, D., Liao, L. Z., Ng, M. K., & Zhang, X. (2013). Sparse canonical correlation analysis: New formulation and algorithm. IEEE transactions on pattern analysis and machine intelligence, 35(12), 3050-3065.
 
-Connor, G. and Korajczyk, R.A. (1988). Risk and return in an equilibrium APT: Application of a new test methodology. *Journal of Financial Economics*, 21(2), 255--289.
+Connor, G. and Korajczyk, R.A. (1988). Risk and return in an equilibrium APT: Application of a new test methodology. *Journal of Financial Economics*, 21(2), 255-289.
 
-Donoho, D.L. and Johnstone, I.M. (1994). Ideal spatial adaptation by wavelet shrinkage. *Biometrika*, 81(3), 425--455.
+Donoho, D.L. and Johnstone, I.M. (1994). Ideal spatial adaptation by wavelet shrinkage. *Biometrika*, 81(3), 425-455.
 
-Doz, C., Giannone, D. and Reichlin, L. (2011). A two-step estimator for large approximate dynamic factor models based on Kalman filtering. *Journal of Econometrics*, 164(1), 188--205.
+Doz, C., Giannone, D. and Reichlin, L. (2011). A two-step estimator for large approximate dynamic factor models based on Kalman filtering. *Journal of Econometrics*, 164(1), 188-205.
 
-Fama, E.F. and French, K.R. (1993). Common risk factors in the returns on stocks and bonds. *Journal of Financial Economics*, 33(1), 3--56.
+Fama, E.F. and French, K.R. (1993). Common risk factors in the returns on stocks and bonds. *Journal of Financial Economics*, 33(1), 3-56.
 
-Fama, E.F. and French, K.R. (2015). A five-factor asset pricing model. *Journal of Financial Economics*, 116(1), 1--22.
+Fama, E.F. and French, K.R. (2015). A five-factor asset pricing model. *Journal of Financial Economics*, 116(1), 1-22.
 
-Friedman, J., Hastie, T. and Tibshirani, R. (2008). Sparse inverse covariance estimation with the graphical lasso. *Biostatistics*, 9(3), 432--441.
+Friedman, J., Hastie, T. and Tibshirani, R. (2008). Sparse inverse covariance estimation with the graphical lasso. *Biostatistics*, 9(3), 432-441.
 
 Gao, C., Ma, Z., Ren, Z., & Zhou, H. H. (2015). Minimax estimation in sparse canonical correlation analysis. *The Annals of Statistics*,
-43(5), 2168–2197
+43(5), 2168–-2197.
 
-Hardoon, D.R., Szedmak, S. and Shawe-Taylor, J. (2004). Canonical correlation analysis: An overview with application to learning methods. *Neural Computation*, 16(12), 2639--2664.
+Gao, C., Ma, Z., & Zhou, H. H. (2017). Sparse CCA: Adaptive estimation and computational barriers. *The Annals of Statistics*,
+45(5), 2074–-2101.
 
-Hendrickson, A.E. and White, P.O. (1964). Promax: A quick method for rotation to oblique simple structure. *British Journal of Statistical Psychology*, 17(1), 65--70.
+Hardoon, D.R., Szedmak, S. and Shawe-Taylor, J. (2004). Canonical correlation analysis: An overview with application to learning methods. *Neural Computation*, 16(12), 2639-2664.
 
-Izenman, A.J. (1975). Reduced-rank regression for the multivariate linear model. *Journal of Multivariate Analysis*, 5(2), 248--264.
+Hendrickson, A.E. and White, P.O. (1964). Promax: A quick method for rotation to oblique simple structure. *British Journal of Statistical Psychology*, 17(1), 65-70.
 
-Kaiser, H.F. (1958). The varimax criterion for analytic rotation in factor analysis. *Psychometrika*, 23(3), 187--200.
+Izenman, A.J. (1975). Reduced-rank regression for the multivariate linear model. *Journal of Multivariate Analysis*, 5(2), 248-264.
 
-Klami, A., Virtanen, S. and Kaski, S. (2013). Bayesian canonical correlation analysis. *Journal of Machine Learning Research*, 14(4), 965--1003.
+Kaiser, H.F. (1958). The varimax criterion for analytic rotation in factor analysis. *Psychometrika*, 23(3), 187-200.
 
-Ledermann, W. (1937). On the rank of the reduced correlational matrix in multiple-factor analysis. *Psychometrika*, 2(2), 85--93.
+Klami, A., Virtanen, S. and Kaski, S. (2013). Bayesian canonical correlation analysis. *Journal of Machine Learning Research*, 14(4), 965-1003.
 
-Leurgans, S.E., Moyeed, R.A. and Silverman, B.W. (1993). Canonical correlation analysis when the data are curves. *Journal of the Royal Statistical Society: Series B*, 55(3), 725--740.
+Laha, N., & Mukherjee, R. (2022). On support recovery with sparse cca: Information theoretic and computational limits. IEEE transactions on information theory, 69(3), 1695-1738.
+
+Ledermann, W. (1937). On the rank of the reduced correlational matrix in multiple-factor analysis. *Psychometrika*, 2(2), 85-93.
+
+Leurgans, S.E., Moyeed, R.A. and Silverman, B.W. (1993). Canonical correlation analysis when the data are curves. *Journal of the Royal Statistical Society: Series B*, 55(3), 725-740.
 
 Ma, Z., Lu, Y. and Foster, D. (2015). Finding linear structure in large datasets with scalable canonical correlation analysis. *Proceedings of ICML*.
 
-Mai, Q. and Zhang, X. (2019). An iterative penalized least squares approach to sparse canonical correlation analysis. *Biometrics*, 75(3), 734--744.
+Mai, Q. and Zhang, X. (2019). An iterative penalized least squares approach to sparse canonical correlation analysis. *Biometrics*, 75(3), 734-744.
 
 Reinsel, G.C. and Velu, R.P. (1998). *Multivariate Reduced-Rank Regression*. Springer.
 
-Ross, S.A. (1976). The arbitrage theory of capital asset pricing. *Journal of Economic Theory*, 13(3), 341--360.
+Ross, S.A. (1976). The arbitrage theory of capital asset pricing. *Journal of Economic Theory*, 13(3), 341-360.
 
-Rothman, A.J., Levina, E. and Zhu, J. (2010). Sparse multivariate regression with covariance estimation. *Journal of Computational and Graphical Statistics*, 19(4), 947--962.
+Rothman, A.J., Levina, E. and Zhu, J. (2010). Sparse multivariate regression with covariance estimation. *Journal of Computational and Graphical Statistics*, 19(4), 947-962.
 
 Rupnik, J. and Shawe-Taylor, J. (2010). Multi-view canonical correlation analysis. In *Proceedings of SiKDD*.
 
-Sharpe, W.F. (1964). Capital asset prices: A theory of market equilibrium under conditions of risk. *Journal of Finance*, 19(3), 425--442.
+Sharpe, W.F. (1964). Capital asset prices: A theory of market equilibrium under conditions of risk. *Journal of Finance*, 19(3), 425-442.
 
-Sz\'ekely, G.J. and Rizzo, M.L. (2005). A new test for multivariate normality. *Journal of Multivariate Analysis*, 93(1), 58--80.
+Sz\'ekely, G.J. and Rizzo, M.L. (2005). A new test for multivariate normality. *Journal of Multivariate Analysis*, 93(1), 58-80.
 
-Sz\'ekely, G.J., Rizzo, M.L. and Bakirov, N.K. (2007). Measuring and testing dependence by correlation of distances. *Annals of Statistics*, 35(6), 2769--2794.
+Sz\'ekely, G.J., Rizzo, M.L. and Bakirov, N.K. (2007). Measuring and testing dependence by correlation of distances. *Annals of Statistics*, 35(6), 2769-2794.
 
-Tibshirani, R., Hastie, T., Narasimhan, B. and Chu, G. (2002). Diagnosis of multiple cancer types by shrunken centroids of gene expression. *PNAS*, 99(10), 6567--6572.
+Tibshirani, R., Hastie, T., Narasimhan, B. and Chu, G. (2002). Diagnosis of multiple cancer types by shrunken centroids of gene expression. *PNAS*, 99(10), 6567-6572.
 
-Tyler, D.E. (1987). A distribution-free $M$-estimator of multivariate scatter. *Annals of Statistics*, 15(1), 234--251.
+Tyler, D.E. (1987). A distribution-free $M$-estimator of multivariate scatter. *Annals of Statistics*, 15(1), 234-251.
 
-van de Geer, S., Bühlmann, P., Ritov, Y. and Dezeure, R. (2014). On asymptotically optimal confidence regions and tests for high-dimensional models. *Annals of Statistics*, 42(3), 1166--1202.
+van de Geer, S., Bühlmann, P., Ritov, Y. and Dezeure, R. (2014). On asymptotically optimal confidence regions and tests for high-dimensional models. *Annals of Statistics*, 42(3), 1166-1202.
 
-Vinod, H.D. (1976). Canonical ridge and econometrics of joint production. *Journal of Econometrics*, 4(2), 147--166.
+Vinod, H.D. (1976). Canonical ridge and econometrics of joint production. *Journal of Econometrics*, 4(2), 147-166.
 
-Wachter, K.W. (1980). The limiting empirical measure of multiple discriminant ratios. *Annals of Statistics*, 8(5), 937--957.
+Wachter, K.W. (1980). The limiting empirical measure of multiple discriminant ratios. *Annals of Statistics*, 8(5), 937-957.
 
 Wang, C. (2007). Variational Bayesian approach to canonical correlation analysis. IEEE Transactions on Neural Networks, 18(3), 905-910.
 
-Witten, D.M., Tibshirani, R. and Hastie, T. (2009). A penalized matrix decomposition, with applications to sparse principal components and canonical correlation analysis. *Biostatistics*, 10(3), 515--534.
+Witten, D.M., Tibshirani, R. and Hastie, T. (2009). A penalized matrix decomposition, with applications to sparse principal components and canonical correlation analysis. *Biostatistics*, 10(3), 515-534.
 
-Wold, H. (1966). Estimation of principal components and related models by iterative least squares. In P.R. Krishnaiah (Ed.), *Multivariate Analysis* (pp. 391--420). Academic Press.
+Wold, H. (1966). Estimation of principal components and related models by iterative least squares. In P.R. Krishnaiah (Ed.), *Multivariate Analysis* (pp. 391-420). Academic Press.
 
-Yuan, M. and Lin, Y. (2006). Model selection and estimation in regression with grouped variables. *Journal of the Royal Statistical Society: Series B*, 68(1), 49--67.
+Yuan, M. and Lin, Y. (2006). Model selection and estimation in regression with grouped variables. *Journal of the Royal Statistical Society: Series B*, 68(1), 49-67.
 
-Zhang, C.H. and Zhang, S.S. (2014). Confidence intervals for low-dimensional parameters in high-dimensional linear models. *Journal of the Royal Statistical Society: Series B*, 76(1), 217--242.
+Zhang, C.H. and Zhang, S.S. (2014). Confidence intervals for low-dimensional parameters in high-dimensional linear models. *Journal of the Royal Statistical Society: Series B*, 76(1), 217-242.
 
-Zhao, P. and Yu, B. (2006). On model selection consistency of lasso. *Journal of Machine Learning Research*, 7, 2541--2563.
+Zhao, P. and Yu, B. (2006). On model selection consistency of lasso. *Journal of Machine Learning Research*, 7, 2541-2563.
 
-Zou, H., Hastie, T. and Tibshirani, R. (2006). Sparse principal component analysis. *Journal of Computational and Graphical Statistics*, 15(2), 265--286.
+Zou, H., Hastie, T. and Tibshirani, R. (2006). Sparse principal component analysis. *Journal of Computational and Graphical Statistics*, 15(2), 265-286.
