@@ -2448,26 +2448,105 @@ This distinction is important. Because PLS maximizes covariance rather than corr
 
 ### Statistical Limitations
 
+Despite its usefulness, Sparse CCA still has several important limitations.
+
 \begin{enumerate}
-  \item \textbf{Non-convexity.} The objective in \eqref{eq:scca} is bilinear in $(\mathbf{a}, \mathbf{b})$, making the overall problem non-convex. The coordinate ascent algorithm is guaranteed to converge to a stationary point, which may be a local (not global) maximum. In practice, multiple random initialisations are recommended.
+    \item \textbf{Non-convexity.}
+    The Witten--Tibshirani--Hastie PMD formulation is bilinear in
+    $(\mathbf{a},\mathbf{b})$:
+    $$
+    \max_{\mathbf{a},\mathbf{b}} 
+    \mathbf{a}^{\top}\widehat{\boldsymbol{\Sigma}}_{XY}\mathbf{b}
+    \quad
+    \text{subject to sparsity and norm constraints.}
+    $$
+    Although the objective is convex in one block when the other block is fixed,
+    it is not jointly convex in $(\mathbf{a},\mathbf{b})$. Therefore, alternating
+    updates should be interpreted as a coordinate-ascent procedure: the objective
+    is nondecreasing along the iterations, but the algorithm is generally only
+    expected to reach a coordinate-wise stationary point, not necessarily a global
+    maximizer. In practice, multiple initializations are recommended.
 
-  \item \textbf{Tuning parameter selection.} Selecting $c_1$ and $c_2$ jointly requires evaluating the model on a grid, which is computationally expensive. Moreover, the permutation-based criterion of Witten et al. (2009) can be conservative. Information-theoretic criteria (e.g., BIC adapted for CCA) remain an active area of research.
+    \item \textbf{Tuning parameter selection.}
+    The sparsity parameters $c_1$ and $c_2$ control the number of variables selected
+    in the two canonical loading vectors. Choosing them jointly is computationally
+    expensive, because it usually requires searching over a two-dimensional grid.
+    Witten, Tibshirani, and Hastie (2009) propose a permutation-based tuning
+    procedure, but the selected model can still depend on the grid, the resampling
+    scheme, and the desired tradeoff between sparsity and canonical correlation.
+    Cross-validation, permutation-based selection, and stability-based selection
+    are all reasonable approaches, but there is no universally accepted tuning
+    rule for SCCA.
 
-  \item \textbf{Sequential deflation bias.} Estimating higher-order canonical pairs via deflation introduces bias, since errors in $(\hat{\mathbf{a}}_1, \hat{\mathbf{b}}_1)$ propagate to subsequent pairs. Joint estimation of all $r$ pairs simultaneously would be more statistically efficient but algorithmically more complex.
+    \item \textbf{Sequential deflation for higher-order pairs.}
+    Higher-order sparse canonical pairs are commonly obtained by deflating the
+    cross-covariance matrix after estimating the leading pair. This is algorithmically
+    convenient, but it is not equivalent to the classical orthogonality structure of
+    ordinary CCA. Errors in the first estimated pair may propagate to later pairs,
+    and the resulting sparse canonical vectors are not automatically guaranteed to
+    satisfy the same orthogonality relations as classical canonical vectors. Joint
+    estimation of several sparse canonical pairs may reduce this sensitivity, but it
+    is computationally more difficult.
 
-  \item \textbf{Inference.} While point estimates are well-studied, constructing valid confidence intervals or hypothesis tests for individual entries of $\hat{\mathbf{a}}_k$ is substantially harder. Debiased lasso methods (Zhang and Zhang 2014; van de Geer et al. 2014) provide one route, but their adaptation to the CCA bilinear structure is non-trivial.
+    \item \textbf{Inference after selection.}
+    Although SCCA theory provides results on point estimation, support recovery, and
+    minimax rates, valid post-selection inference for entries of
+    $\widehat{\mathbf{a}}_k$ and $\widehat{\mathbf{b}}_k$ remains difficult. The main
+    obstacle is that SCCA estimators come from a nonlinear, non-smooth, and generally
+    non-convex bilinear optimization problem.
+    
+    Debiased or desparsified lasso methods provide a useful analogy. In high-dimensional
+    regression, Zhang and Zhang (2014) and van de Geer et al. (2014) correct the biased
+    lasso estimator by adding a score-type term involving an approximate inverse of the
+    Gram matrix; under suitable sparsity and regularity conditions, the corrected
+    estimator is asymptotically normal and can be used for confidence intervals and
+    tests. However, these results apply to regression-type models, not directly to SCCA.
+    Extending such post-selection inference ideas to SCCA is nontrivial because SCCA
+    has two coupled loading vectors, normalization constraints, sign indeterminacy, and
+    a bilinear objective.
 \end{enumerate}
 
 ### Methodological Extensions
 
+Several directions remain important for future work.
+
 \begin{enumerate}
-  \item \textbf{Nonlinear CCA.} Kernel CCA (Hardoon, Szedmak, and Shawe-Taylor 2004) extends classical CCA to nonlinear associations by mapping data into a reproducing kernel Hilbert space. Sparse kernel CCA combining kernel representations with sparsity constraints is an emerging area.
+    \item \textbf{Nonlinear SCCA.}
+    Kernel CCA extends classical CCA to nonlinear relationships by mapping the two
+    data views into reproducing kernel Hilbert spaces (Hardoon, Szedmak, and
+    Shawe-Taylor, 2004). A natural extension is to combine nonlinear feature maps
+    with sparsity or feature selection, so that the resulting method can capture
+    nonlinear association while remaining interpretable. However, such methods
+    introduce additional tuning choices, such as kernel parameters and sparsity
+    penalties, and may be more difficult to analyze theoretically.
 
-  \item \textbf{Multi-view CCA.} With more than two groups (views) of variables, one seeks a shared latent representation capturing associations across all views simultaneously. The framework of Multiset CCA (Carroll 1968) or generalisations such as MCCA and GCCA handle this, and sparse variants have been proposed (Rupnik and Shawe-Taylor 2010).
+    \item \textbf{Multiview and generalized CCA.}
+    Many modern applications involve more than two data blocks, such as multiple
+    omics platforms, multiple imaging modalities, or several market segments.
+    Multiset CCA and generalized CCA extend the CCA framework beyond two views
+    (Carroll, 1968; Kettenring, 1971; Rupnik and Shawe-Taylor, 2010). Sparse
+    versions of generalized CCA are a natural continuation of SCCA, because they
+    aim to identify a small number of relevant variables across multiple views
+    rather than only two.
 
-  \item \textbf{Temporal and dependent data.} As noted in Part I, financial return data exhibit serial dependence. An extension of SCCA to time-series data -- either by whitening the time-series residuals first or by incorporating autocorrelation structure into the likelihood -- would be practically important but theoretically underdeveloped.
+    \item \textbf{Temporal and dependent data.}
+    The financial-return analysis in Part I shows strong volatility clustering and
+    time-varying covariance structure. This does not necessarily imply strong serial
+    correlation in the raw returns, but it does indicate that the i.i.d. assumptions
+    behind standard CCA and SCCA theory are questionable for financial data.
+    Future work could combine SCCA with time-series models, for example by first
+    filtering returns using GARCH-type models, by estimating canonical directions
+    from standardized residuals, or by allowing the canonical vectors and covariance
+    matrices to evolve over time.
 
-  \item \textbf{Online/streaming CCA.} In applications where data arrive sequentially (e.g., high-frequency trading, streaming genomics), online algorithms that update the canonical vectors incrementally are needed. Sparse online CCA combining stochastic gradient descent with $\ell_1$ projection is an active research direction (Ma, Lu, and Foster 2015).
+    \item \textbf{Large-scale and streaming CCA.}
+    For very large data sets, classical CCA can be computationally expensive because
+    it requires estimating and decomposing large covariance matrices. Scalable and
+    stochastic CCA algorithms, such as those of Ma, Lu, and Foster (2015), address
+    the computational side of this problem. However, these methods are not themselves
+    sparse CCA procedures. A useful future direction is to develop streaming or
+    online SCCA algorithms that update sparse canonical vectors as new observations
+    arrive, while preserving both computational efficiency and interpretability.
 \end{enumerate}
 
 \newpage
@@ -2561,6 +2640,8 @@ Hendrickson, A.E. and White, P.O. (1964). Promax: A quick method for rotation to
 Izenman, A.J. (1975). Reduced-rank regression for the multivariate linear model. *Journal of Multivariate Analysis*, 5(2), 248-264.
 
 Kaiser, H.F. (1958). The varimax criterion for analytic rotation in factor analysis. *Psychometrika*, 23(3), 187-200.
+
+Kettenring, J. R. (1971). Canonical analysis of several sets of variables. *Biometrika*, 58(3), 433-451.
 
 Klami, A., Virtanen, S. and Kaski, S. (2013). Bayesian canonical correlation analysis. *Journal of Machine Learning Research*, 14(4), 965-1003.
 
