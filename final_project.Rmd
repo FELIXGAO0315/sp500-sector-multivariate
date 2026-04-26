@@ -2027,62 +2027,276 @@ vectors.
 
 ### Consistency in High Dimensions
 
-A central question is: under what conditions does $\hat{\mathbf{a}}_1 \to \mathbf{a}_1^*$ (the true leading canonical vector) as $n \to \infty$, even when $p_1, p_2 \to \infty$? The answer depends critically on the sparsity of the true canonical vectors.
+A central question is: under what conditions does $\hat{\mathbf{a}}_1 \to \mathbf{a}_1^*$ and
+$\hat{\mathbf{b}}_1 \to \mathbf{b}_1^*$ as $n \to \infty$, even when $p_1,p_2 \to \infty$?
+The answer depends critically on the sparsity of the true canonical vectors and on the strength
+of the leading canonical correlation signal.
 
 \begin{definition}
-The true canonical coefficient vectors $\mathbf{a}_1^* \in \mathbb{R}^{p_1}$ and $\mathbf{b}_1^* \in \mathbb{R}^{p_2}$ are said to be \textbf{$s$-sparse} if they have at most $s$ nonzero entries, i.e., $\|\mathbf{a}_1^*\|_0 \leq s_1$ and $\|\mathbf{b}_1^*\|_0 \leq s_2$.
+The true canonical coefficient vectors $\mathbf{a}_1^* \in \mathbb{R}^{p_1}$ and
+$\mathbf{b}_1^* \in \mathbb{R}^{p_2}$ are said to be \textbf{$s$-sparse} if
+
+$$
+\|\mathbf{a}_1^*\|_0 \le s_1,
+\qquad
+\|\mathbf{b}_1^*\|_0 \le s_2 .
+$$
+
 \end{definition}
 
-The following result synthesises work by Gao, Ma, and Zhou (2015) and Chen and Bickel (2006):
+Suppose the first $r$ population
+canonical directions for the $X$-variables and $Y$-variables are collected in the
+matrices
+$$
+U = (\mathbf u_1,\ldots,\mathbf u_r)\in\mathbb R^{p\times r},
+\qquad
+V = (\mathbf v_1,\ldots,\mathbf v_r)\in\mathbb R^{m\times r}.
+$$
+Here $p$ is the dimension of $X$, $m$ is the dimension of $Y$, and $r$ is the number
+of leading canonical pairs being estimated. Gao, Ma, and Zhou (2017) formulate
+sparsity through the row supports of $U$ and $V$. Define
+$$
+\operatorname{supp}(U)
+=
+\{j: \text{the }j\text{-th row of }U\text{ is nonzero}\},
+\qquad
+\operatorname{supp}(V)
+=
+\{j: \text{the }j\text{-th row of }V\text{ is nonzero}\}.
+$$
+The sparse CCA model assumes
+$$
+|\operatorname{supp}(U)|\le s_u,
+\qquad
+|\operatorname{supp}(V)|\le s_v.
+$$
+Thus $s_u$ is the number of $X$-variables involved in the first $r$ canonical
+directions, and $s_v$ is the number of $Y$-variables involved in the first $r$
+canonical directions. When $r=1$, this reduces to the usual entrywise sparsity
+condition
+$$
+\|\mathbf u_1\|_0\le s_u,
+\qquad
+\|\mathbf v_1\|_0\le s_v.
+$$
+For $r>1$, row sparsity means that only a small set of variables is active across
+the leading $r$ canonical directions.
 
-\begin{theorem}[Informal; Gao--Ma--Zhou 2015]
-\label{thm:consistency}
-Under regularity conditions on $\symbf{\Sigma}$ (bounded condition number, eigengap condition $\rho_1^* - \rho_2^* \geq \delta > 0$), if $\mathbf{a}_1^*$ and $\mathbf{b}_1^*$ are $s_1$- and $s_2$-sparse respectively, and if the tuning parameters $c_1 \sim \sqrt{s_1}$ and $c_2 \sim \sqrt{s_2}$, then the sparse CCA estimator satisfies
+To measure estimation error, Gao, Ma, and Zhou (2017) use the covariance-weighted
+loss
 $$
-\|\hat{\mathbf{a}}_1 - \mathbf{a}_1^*\|_2 = O_P\!\left(\sqrt{\frac{s_1 \log p_1}{n}} + \sqrt{\frac{s_2 \log p_2}{n}}\right),
+L(U,\widehat U)
+=
+\inf_{W\in O(r)}
+\operatorname{Tr}
+\left[
+(\widehat U W-U)^\top
+\symbf{\Sigma}_x
+(\widehat U W-U)
+\right],
 $$
-and analogously for $\hat{\mathbf{b}}_1$.
+where $O(r)$ denotes the set of $r\times r$ orthogonal matrices. Equivalently,
+$$
+L(U,\widehat U)
+=
+\inf_{W\in O(r)}
+\left\|
+\symbf{\Sigma}_x^{1/2}(\widehat U W-U)
+\right\|_F^2.
+$$
+The orthogonal matrix $W$ accounts for the fact that an $r$-dimensional canonical
+subspace is identifiable only up to rotation. In the rank-one case, $r=1$, this
+reduces to the usual sign ambiguity:
+$$
+L(U,\widehat U)
+=
+\min_{\xi\in\{-1,1\}}
+(\xi\widehat{\mathbf u}-\mathbf u)^\top
+\symbf{\Sigma}_x
+(\xi\widehat{\mathbf u}-\mathbf u).
+$$
+The analogous loss for $V$ is
+$$
+L(V,\widehat V)
+=
+\inf_{W\in O(r)}
+\operatorname{Tr}
+\left[
+(\widehat V W-V)^\top
+\symbf{\Sigma}_y
+(\widehat V W-V)
+\right].
+$$
+
+Let
+
+$$
+\lambda_1\ge \lambda_2\ge \cdots \ge \lambda_r>0
+$$
+
+denote the first $r$ population canonical correlations, and let $\lambda$ denote the lower bound on the smallest
+leading canonical correlation:
+
+$$
+\lambda_r \ge \lambda.
+$$
+
+Thus $\lambda$ measures the signal strength of the canonical relationship.
+A larger $\lambda$ means that the leading canonical directions are easier
+to estimate, while a smaller $\lambda$ corresponds to a weaker association
+between the two sets of variables.
+
+\begin{theorem}[Statistical consistency under sparse canonical directions]
+Suppose the assumptions of Gao, Ma, and Zhou (2017, Theorem 4.2) hold for the
+sparse CCA model with row-sparsity levels $s_u$ and $s_v$. In particular, assume
+that the leading canonical correlations are bounded away from zero, the marginal
+covariance matrices have bounded eigenvalues, and the sample size is large enough
+relative to the sparse complexity of the problem. If
+
+$$
+\frac{s_u(r+\log p)}{n\lambda^2}\to 0
+\qquad\text{and}\qquad
+\frac{s_v(r+\log m)}{n\lambda^2}\to 0,
+$$
+
+then the sparse CCA estimators satisfy
+
+$$
+L(U,\widehat U)\to 0,
+\qquad
+L(V,\widehat V)\to 0
+$$
+
+in probability. Therefore, the estimated sparse canonical directions converge to
+the true population canonical directions, up to the natural sign or rotation
+ambiguity.
 \end{theorem}
 
-This result has several important implications:
+This result shows that statistical consistency is possible in high-dimensional
+CCA when the population canonical directions are sufficiently sparse. The effective
+dimension is controlled by the sparsity levels $s_u$ and $s_v$, rather than by the
+full ambient dimensions $p$ and $m$. In the rank-one case, the consistency condition
+has the familiar form
 
-\begin{enumerate}
-  \item \textbf{Dimension-free consistency:} Consistent estimation is possible even when $p_1, p_2 \gg n$, provided $s_1 \log p_1 / n \to 0$ and $s_2 \log p_2 / n \to 0$. The logarithmic dependence on dimensionality is a consequence of the $\ell_1$ regularisation controlling a union-of-subsets bound.
+$$
+\frac{s_u\log p}{n\lambda^2}\to 0,
+\qquad
+\frac{s_v\log m}{n\lambda^2}\to 0.
+$$
 
-  \item \textbf{Oracle rate:} The rate $\sqrt{s \log p / n}$ matches the minimax-optimal rate for sparse vector estimation (Donoho and Johnstone 1994), up to logarithmic factors. In this sense, SCCA achieves the oracle rate of a procedure that knew the support of $\mathbf{a}_1^*$ and $\mathbf{b}_1^*$ in advance.
-
-  \item \textbf{Eigengap requirement:} The assumption $\rho_1^* - \rho_2^* \geq \delta$ ensures the first canonical direction is identifiable. Without this, the problem is intrinsically harder, akin to subspace (rather than vector) recovery.
-\end{enumerate}
+Thus, even when $p$ and $m$ are much larger than $n$, the canonical directions can
+still be consistently estimated as long as the true directions are sparse, the
+canonical correlation signal is not too weak, and the sparse complexity terms
+vanish.
 
 ### Variable Selection Consistency
 
-Beyond rate of convergence, one may ask whether SCCA recovers the support $\mathcal{S}_a = \{j : a_{1j}^* \neq 0\}$ of the true canonical vectors exactly.
+Beyond estimating the directions themselves, one may ask whether SCCA can recover the
+correct support:
 
-\begin{proposition}[Informal; Mai and Zhang 2019]
-Under an \emph{irrepresentability condition} (analogous to the lasso sign consistency condition of Zhao and Yu 2006), if $\min_{j \in \mathcal{S}_a} |a_{1j}^*| \geq C\sqrt{s_1 \log p_1 / n}$ (the \emph{beta-min condition}), then with high probability,
 $$
-\hat{\mathcal{S}}_a = \mathcal{S}_a.
+\widehat{S}_a = \{j:\widehat{a}_{1j}\ne 0\},
+\qquad
+\widehat{S}_b = \{j:\widehat{b}_{1j}\ne 0\}.
 $$
-\end{proposition}
 
-The irrepresentability condition essentially requires that the canonical coefficient for each relevant variable is not too well-approximated by a linear combination of the irrelevant variables weighted by the cross-covariance matrix. In gene expression applications, this is plausible if pathways do not overlap too heavily.
+This is a stronger requirement than estimation consistency. Small $\ell_2$ error does not
+automatically imply exact support recovery unless the nonzero coefficients are separated
+from zero.
+
+\begin{theorem}[Support recovery in sparse CCA; Laha and Mukherjee, 2023]
+For high-dimensional sparse CCA, exact support recovery is possible only under additional
+sample-size and signal-strength conditions. In particular, if the sparsity levels are not too
+large relative to $n$ and $p_1+p_2$, and the minimum nonzero entries of the canonical vectors
+are sufficiently large, then consistent support recovery is achievable. Conversely, when the
+sparsity level is too high or the minimum signal strength is too small, exact support recovery
+is information-theoretically impossible.
+\end{theorem}
+
+Thus, variable selection consistency should not be presented as a direct consequence of the
+usual SCCA consistency theorem. It requires separate support-recovery theory. Laha and
+Mukherjee (2023) give such a theory: they define successful support recovery as exact recovery
+with probability tending to one, identify sparsity regimes where recovery is possible, and show
+that sufficiently large minimum nonzero entries are necessary for asymptotically consistent
+support recovery.
 
 ### Minimax Lower Bounds
 
-The SCCA rate in Theorem \ref{thm:consistency} is not merely an artefact of the particular estimator --- it is (near-)optimal among all estimators. Gao, Ma, and Zhou (2015) establish matching minimax lower bounds:
+Another theoretical question is whether the convergence rates achieved by SCCA estimators
+are optimal. Gao, Ma, Ren, and Zhou (2015) study sparse CCA from a decision-theoretic
+perspective and establish minimax lower and upper bounds for estimating the leading sparse
+canonical directions.
 
-\begin{theorem}[Lower bound; Gao--Ma--Zhou 2015]
-Over the class of problems with $s_1$-sparse $\mathbf{a}_1^*$ and $s_2$-sparse $\mathbf{b}_1^*$,
+\begin{theorem}[Minimax lower bound; Gao, Ma, Ren, and Zhou, 2015]
+Let $\mathbf{U}_1$ and $\mathbf{V}_1$ denote the leading sparse canonical direction matrices.
+Under the sparse CCA model of Gao et al. (2015), the minimax risk for estimating
+$\mathbf{U}_1\mathbf{V}_1^\top$ satisfies
+
 $$
-\inf_{\hat{\mathbf{a}}} \sup_{\mathbf{a}_1^* \in \mathcal{A}_{s_1}} \mathbb{E}\|\hat{\mathbf{a}} - \mathbf{a}_1^*\|_2^2 \geq C \cdot \frac{s_1 \log(p_1/s_1)}{n}.
+\inf_{\widehat{\mathbf{U}}_1,\widehat{\mathbf{V}}_1}
+\sup_{\Sigma\in\mathcal{F}_q}
+\mathbb{E}_{\Sigma}
+\left\|
+\widehat{\mathbf{U}}_1\widehat{\mathbf{V}}_1^\top
+-
+\mathbf{U}_1\mathbf{V}_1^\top
+\right\|_F^2
+\ge
+c\,\varepsilon_n^2 \wedge c_0,
 $$
+
+where
+
+$$
+\varepsilon_n^2
+=
+\frac{1}{n\lambda^2}
+\left[
+r(k_q^u+k_q^v)
++
+k_q^u \log\!\left(\frac{\mathrm{e} p_1}{k_q^u}\right)
++
+k_q^v \log\!\left(\frac{\mathrm{e} p_2}{k_q^v}\right)
+\right].
+$$
+
 \end{theorem}
 
-This shows that the SCCA rate is optimal (up to logarithmic factors) and no method can do substantially better.
+For exactly sparse leading directions with rank $r=1$, this rate reduces heuristically to
+$$
+\frac{s_1\log(\mathrm{e} p_1/s_1)+s_2\log(\mathrm{e} p_2/s_2)}{n\lambda^2}.
+$$
+This result belongs in the minimax subsection, not the basic consistency subsection: it is about
+the optimal risk rate, not merely convergence in probability. Gao et al. define this rate in
+their equation (15), prove a matching upper bound in Theorem 1, and give a minimax lower
+bound in Theorem 3.
 
 ### Finite-Sample Guarantees
 
-For practitioners, finite-sample performance depends heavily on the choice of tuning parameters $c_1$ and $c_2$. The canonical approach is cross-validation: one partitions the data into training and validation folds, and selects $(c_1, c_2)$ to maximise the canonical correlation on the validation set. However, in the canonical correlation objective, overfitting on the training set inflates the estimated correlations, so careful calibration is essential. Witten et al. (2009) propose a permutation-based approach: the null distribution of the validation canonical correlation is estimated by randomly permuting the rows of $\mathbf{Y}$, and $(c_1, c_2)$ is chosen so that the validation correlation significantly exceeds the permutation null.
+The same Gao et al. (2015) result also yields a finite-sample high-probability guarantee.
+Under their assumptions, the sparse CCA estimator satisfies
+
+$$
+\left\|
+\widehat{\mathbf{U}}_1\widehat{\mathbf{V}}_1^\top
+-
+\mathbf{U}_1\mathbf{V}_1^\top
+\right\|_F^2
+\le
+C\varepsilon_n^2
+$$
+
+with probability at least
+
+$$
+1
+-
+\exp\!\left[-C'\left(k_q^u+\log\frac{\mathrm{e} p_1}{k_q^u}\right)\right]
+-
+\exp\!\left[-C'\left(k_q^v+\log\frac{\mathrm{e} p_2}{k_q^v}\right)\right].
+$$
+This is a finite-sample statement because it gives an explicit probability bound for fixed
+$n,p_1,p_2,s_1,s_2$, rather than only an asymptotic convergence statement.
 
 \newpage
 
@@ -2202,8 +2416,6 @@ Carroll, J.D. (1968). A generalization of canonical correlation analysis to thre
 
 Chen, M. and Huang, J. (2012). Sparse reduced-rank regression for simultaneous dimension reduction and variable selection. *Journal of the American Statistical Association*, 107(500), 1533--1545.
 
-Chen, M. and Bickel, P.J. (2006). Efficient estimation of covariance and partial correlation based on Gaussian graphical models. *Annals of Statistics*, 34(6), 2662--2679.
-
 Chu, D., Liao, L. Z., Ng, M. K., & Zhang, X. (2013). Sparse canonical correlation analysis: New formulation and algorithm. IEEE transactions on pattern analysis and machine intelligence, 35(12), 3050-3065.
 
 Connor, G. and Korajczyk, R.A. (1988). Risk and return in an equilibrium APT: Application of a new test methodology. *Journal of Financial Economics*, 21(2), 255--289.
@@ -2218,7 +2430,8 @@ Fama, E.F. and French, K.R. (2015). A five-factor asset pricing model. *Journal 
 
 Friedman, J., Hastie, T. and Tibshirani, R. (2008). Sparse inverse covariance estimation with the graphical lasso. *Biostatistics*, 9(3), 432--441.
 
-Gao, C., Ma, Z. and Zhou, H.H. (2015). Sparse CCA: Adaptive estimation and computational barriers. *Annals of Statistics*, 45(5), 2074--2101.
+Gao, C., Ma, Z., Ren, Z., & Zhou, H. H. (2015). Minimax estimation in sparse canonical correlation analysis. *The Annals of Statistics*,
+43(5), 2168–2197
 
 Hardoon, D.R., Szedmak, S. and Shawe-Taylor, J. (2004). Canonical correlation analysis: An overview with application to learning methods. *Neural Computation*, 16(12), 2639--2664.
 
