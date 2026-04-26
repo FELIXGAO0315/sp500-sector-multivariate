@@ -1827,153 +1827,6 @@ The algorithm proceeds by coordinate ascent:
   \item Repeat steps 2--3 until convergence.
 \end{enumerate}
 
-\begin{proposition}[Soft-thresholding update via KKT]
-\label{prop:soft-thresh}
-Let $\mathbf{c} \in \mathbb{R}^{p_1} \setminus \{\mathbf{0}\}$ and consider
-the subproblem
-$$
-\max_{\mathbf{a}}\; \mathbf{a}^\top \mathbf{c}
-\quad\text{s.t.}\quad
-\|\mathbf{a}\|_2 \le 1,\; \|\mathbf{a}\|_1 \le c_1, \qquad
-c_1 \in [1, \sqrt{p_1}].
-$$
-There exists a unique optimiser $\mathbf{a}^*$ given by
-$$
-\mathbf{a}^* = \frac{S(\mathbf{c}, \nu^*)}{\|S(\mathbf{c}, \nu^*)\|_2},
-$$
-where $\nu^* \ge 0$ is the smallest value satisfying
-$$
-\frac{\|S(\mathbf{c}, \nu^*)\|_1}{\|S(\mathbf{c}, \nu^*)\|_2} \le c_1.
-$$
-In particular, $\nu^* = 0$ when $\|\mathbf{c}\|_1/\|\mathbf{c}\|_2 \le c_1$
-($\ell_1$ constraint inactive), and otherwise $\nu^*$ is determined by
-equality and locatable by bisection.
-\end{proposition}
-
-\begin{proof}
-The objective is linear and the feasible set is the intersection of two
-compact convex sets, so a maximiser exists and lies on the boundary. Form
-the Lagrangian
-$$
-L(\mathbf{a},\mu,\nu) = \mathbf{a}^\top \mathbf{c}
-- \tfrac{\mu}{2}\bigl(\|\mathbf{a}\|_2^2 - 1\bigr)
-- \nu\bigl(\|\mathbf{a}\|_1 - c_1\bigr),
-\qquad \mu, \nu \ge 0.
-$$
-Stationarity in $\mathbf{a}$ requires
-$0 \in \partial_{\mathbf{a}} L = \mathbf{c} - \mu\mathbf{a}
-- \nu\,\partial\|\mathbf{a}\|_1$, which component-wise reads
-$0 = c_j - \mu a_j - \nu \xi_j$ with
-$\xi_j = \mathrm{sign}(a_j)$ if $a_j \ne 0$ and
-$\xi_j \in [-1,1]$ if $a_j = 0$.
-
-Case-splitting on the sign of $a_j$ gives:
-$a_j > 0$ requires $c_j > \nu$ and $\mu a_j = c_j - \nu$;
-$a_j < 0$ requires $c_j < -\nu$ and $\mu a_j = c_j + \nu$;
-$a_j = 0$ requires $|c_j| \le \nu$. The three cases combine into the
-single soft-thresholding identity
-
-\begin{equation}
-\mu\,a_j \;=\; \mathrm{sign}(c_j)\max(|c_j| - \nu,\, 0) \;=\; S(c_j,\nu),
-\qquad j = 1,\ldots,p_1. \tag{$\star$}
-\end{equation}
-
-Since $\mathbf{c} \ne \mathbf{0}$ and any $\mathbf{a}$ with $\mathbf{a}^\top
-\mathbf{c} > 0$ is improved by scaling toward $\|\mathbf{a}\|_2 = 1$, the
-$\ell_2$ constraint is active at the optimum: $\mu > 0$. Taking $\ell_2$
-norms in $(\star)$ then yields $\mu = \|S(\mathbf{c}, \nu)\|_2$, and hence
-$$
-\mathbf{a}^* = \frac{S(\mathbf{c}, \nu)}{\|S(\mathbf{c}, \nu)\|_2}.
-$$
-
-It remains to determine $\nu$. Define
-$g(\nu) := \|S(\mathbf{c}, \nu)\|_1 / \|S(\mathbf{c}, \nu)\|_2$ on
-$[0, \max_j|c_j|)$. The mapping $\nu \mapsto S(\mathbf{c}, \nu)$ is
-continuous and componentwise non-increasing in $|S_j|$, with the support
-shrinking weakly as $\nu$ grows. A direct calculation shows
-$g(0) = \|\mathbf{c}\|_1/\|\mathbf{c}\|_2 \in [1,\sqrt{p_1}]$, that $g$ is
-continuous, and that $g \to 1$ as $\nu \to \max_j|c_j|^-$ (only the
-largest entry survives). Moreover $g$ is non-increasing on its domain --
-this is a standard property of the $\ell_1/\ell_2$ ratio under componentwise
-shrinkage. Consequently:
-\begin{itemize}
-\item if $g(0) \le c_1$, the $\ell_1$ constraint is inactive,
-      complementary slackness gives $\nu^* = 0$, and
-      $\mathbf{a}^* = \mathbf{c}/\|\mathbf{c}\|_2$;
-\item otherwise, the unique $\nu^* > 0$ solving $g(\nu^*) = c_1$ exists
-      by the intermediate value theorem and can be located numerically
-      by bisection on $[0, \max_j|c_j|)$.
-\end{itemize}
-Uniqueness of $\mathbf{a}^*$ follows from uniqueness of $\nu^*$ together
-with the explicit closed form.
-\end{proof}
-
-The same argument applies verbatim to the $\mathbf{b}$-subproblem with
-$\mathbf{c} = \mathbf{M}^\top \mathbf{a}$ and $c_1$ replaced by $c_2$.
-
-\begin{proposition}[Monotone convergence of coordinate ascent]
-\label{prop:converge}
-Let $F(\mathbf{a},\mathbf{b}) = \mathbf{a}^\top \mathbf{Mb}$ and let
-$\mathcal{C}_a = \{\mathbf{a} : \|\mathbf{a}\|_2 \le 1, \|\mathbf{a}\|_1
-\le c_1\}$, $\mathcal{C}_b = \{\mathbf{b} : \|\mathbf{b}\|_2 \le 1,
-\|\mathbf{b}\|_1 \le c_2\}$. Denote the iterates produced by coordinate
-ascent by $(\mathbf{a}^{(t)},\mathbf{b}^{(t)})$. Then:
-\begin{enumerate}
-\item the sequence $F^{(t)} := F(\mathbf{a}^{(t)}, \mathbf{b}^{(t)})$
-      is non-decreasing and converges to a limit $F^* \le \sup F$;
-\item every cluster point $(\mathbf{a}^*, \mathbf{b}^*)$ of the iterates
-      satisfies the block-wise stationarity conditions
-      $\mathbf{a}^* = \arg\max_{\mathcal{C}_a} F(\cdot, \mathbf{b}^*)$
-      and
-      $\mathbf{b}^* = \arg\max_{\mathcal{C}_b} F(\mathbf{a}^*, \cdot)$.
-\end{enumerate}
-\end{proposition}
-
-\begin{proof}
-\textit{(i) Monotonicity.} The $\mathbf{a}$-update solves
-$\max_{\mathbf{a} \in \mathcal{C}_a} F(\mathbf{a}, \mathbf{b}^{(t)})$
-exactly (Proposition~\ref{prop:soft-thresh}), so
-$$
-F\bigl(\mathbf{a}^{(t+1)}, \mathbf{b}^{(t)}\bigr) \;\ge\;
-F\bigl(\mathbf{a}^{(t)}, \mathbf{b}^{(t)}\bigr).
-$$
-Symmetrically, the subsequent $\mathbf{b}$-update gives
-$F(\mathbf{a}^{(t+1)}, \mathbf{b}^{(t+1)})
-\ge F(\mathbf{a}^{(t+1)}, \mathbf{b}^{(t)})$. Composition shows
-$F^{(t+1)} \ge F^{(t)}$.
-
-\textit{(ii) Boundedness and limit.} $F$ is continuous on the compact set
-$\mathcal{C}_a \times \mathcal{C}_b$, hence bounded above. Combined with
-monotonicity, $\{F^{(t)}\}$ converges to some $F^* \in \mathbb{R}$.
-
-\textit{(iii) Cluster points are stationary.} By Bolzano--Weierstrass the
-bounded sequence $\{(\mathbf{a}^{(t)}, \mathbf{b}^{(t)})\}$ has at least
-one cluster point $(\mathbf{a}^*, \mathbf{b}^*) \in \mathcal{C}_a \times
-\mathcal{C}_b$; let $t_k$ be a subsequence along which convergence holds.
-Continuity of $F$ gives $F(\mathbf{a}^*, \mathbf{b}^*) = F^*$.
-
-The closed-form $\mathbf{a}^{(t_k+1)} = S(\mathbf{Mb}^{(t_k)},
-\nu^{(t_k)}) / \|S(\mathbf{Mb}^{(t_k)}, \nu^{(t_k)})\|_2$ is a continuous
-function of $\mathbf{b}^{(t_k)}$ (the soft-threshold operator and the
-multiplier $\nu$ depend continuously on the input vector when the
-$\ell_1$ constraint is strict). Passing to the limit along $t_k$,
-$$
-\mathbf{a}^* \;=\; \lim_{k\to\infty} \mathbf{a}^{(t_k+1)}
-\;=\; \arg\max_{\mathbf{a} \in \mathcal{C}_a} F(\mathbf{a}, \mathbf{b}^*),
-$$
-and analogously for $\mathbf{b}^*$. Hence $(\mathbf{a}^*, \mathbf{b}^*)$
-satisfies the block-wise stationarity conditions, i.e.\ it is a
-\emph{coordinate-wise} maximum of $F$.
-\end{proof}
-
-\begin{remark}
-Block-wise stationarity is strictly weaker than global optimality: $F$ is
-bilinear, hence non-convex in $(\mathbf{a}, \mathbf{b})$ jointly, and
-saddle points or local maxima are possible. In practice one runs the
-algorithm from several random initialisations of $\mathbf{b}^{(0)}$ and
-retains the iterate achieving the largest $F^*$.
-\end{remark}
-
 ### Higher-Order Canonical Pairs
 
 To obtain the $k$-th canonical pair, one deflates the cross-product matrix:
@@ -2341,9 +2194,9 @@ The connection between the two methods appears through generalized eigenvalue pr
 $$
 \mathbf{B}_{\mathrm{OLS}}
 =
-\boldsymbol{\Sigma}_{XX}^{-1}\boldsymbol{\Sigma}_{XY},
+\symbf{\Sigma}_{XX}^{-1}\symbf{\Sigma}_{XY},
 $$
-assuming $\boldsymbol{\Sigma}_{XX}$ is nonsingular. RRR then replaces this full-rank coefficient matrix by a rank-$r$ approximation, but the approximation is taken with respect to the response covariance structure rather than by simply truncating the ordinary Euclidean singular value decomposition of $\mathbf{B}_{\mathrm{OLS}}$. Therefore, a formula such as
+assuming $\symbf{\Sigma}_{XX}$ is nonsingular. RRR then replaces this full-rank coefficient matrix by a rank-$r$ approximation, but the approximation is taken with respect to the response covariance structure rather than by simply truncating the ordinary Euclidean singular value decomposition of $\mathbf{B}_{\mathrm{OLS}}$. Therefore, a formula such as
 $$
 \widehat{\mathbf{B}}
 =
@@ -2366,22 +2219,22 @@ $$
 \mathbf{Y}
 \end{pmatrix},
 \qquad
-\boldsymbol{\Sigma}
+\symbf{\Sigma}
 =
 \begin{pmatrix}
-\boldsymbol{\Sigma}_{XX} & \boldsymbol{\Sigma}_{XY} \\
-\boldsymbol{\Sigma}_{YX} & \boldsymbol{\Sigma}_{YY}
+\symbf{\Sigma}_{XX} & \symbf{\Sigma}_{XY} \\
+\symbf{\Sigma}_{YX} & \symbf{\Sigma}_{YY}
 \end{pmatrix},
 $$
 and let
 $$
-\boldsymbol{\Omega}
+\symbf{\Omega}
 =
-\boldsymbol{\Sigma}^{-1}
+\symbf{\Sigma}^{-1}
 =
 \begin{pmatrix}
-\boldsymbol{\Omega}_{XX} & \boldsymbol{\Omega}_{XY} \\
-\boldsymbol{\Omega}_{YX} & \boldsymbol{\Omega}_{YY}
+\symbf{\Omega}_{XX} & \symbf{\Omega}_{XY} \\
+\symbf{\Omega}_{YX} & \symbf{\Omega}_{YY}
 \end{pmatrix}
 $$
 denote the precision matrix of the joint vector
@@ -2389,18 +2242,18 @@ $(\mathbf{X}^{\top},\mathbf{Y}^{\top})^{\top}$.
 
 Under a Gaussian graphical model, zeros in the precision matrix correspond to conditional independences between variables, conditional on all remaining variables. This idea goes back to covariance selection in Dempster (1972) and is treated systematically in Lauritzen (1996). The graphical lasso estimates a sparse precision matrix by solving the penalized likelihood problem
 $$
-\widehat{\boldsymbol{\Omega}}
+\widehat{\symbf{\Omega}}
 =
-\arg\max_{\boldsymbol{\Omega}\succ 0}
+\arg\max_{\symbf{\Omega}\succ 0}
 \left\{
-\log\det(\boldsymbol{\Omega})
+\log\det(\symbf{\Omega})
 -
-\operatorname{tr}(\widehat{\boldsymbol{\Sigma}}\boldsymbol{\Omega})
+\operatorname{tr}(\widehat{\symbf{\Sigma}}\symbf{\Omega})
 -
-\lambda\|\boldsymbol{\Omega}\|_1
+\lambda\|\symbf{\Omega}\|_1
 \right\},
 $$
-where $\widehat{\boldsymbol{\Sigma}}$ is the sample covariance matrix and $\lambda>0$ controls the sparsity level; this formulation is commonly associated with the graphical lasso of Friedman, Hastie, and Tibshirani (2008). Equivalently, this estimator can be viewed as an $\ell_1$-regularized maximum-likelihood estimator for the inverse covariance matrix.
+where $\widehat{\symbf{\Sigma}}$ is the sample covariance matrix and $\lambda>0$ controls the sparsity level; this formulation is commonly associated with the graphical lasso of Friedman, Hastie, and Tibshirani (2008). Equivalently, this estimator can be viewed as an $\ell_1$-regularized maximum-likelihood estimator for the inverse covariance matrix.
 
 The entries of the precision matrix are closely related to partial correlations, but they are not themselves partial correlations. For variables $i$ and $j$, the partial correlation after conditioning on all remaining variables is
 $$
@@ -2409,7 +2262,7 @@ $$
 -\frac{\Omega_{ij}}
 {\sqrt{\Omega_{ii}\Omega_{jj}}}.
 $$
-Thus, the off-diagonal block $\boldsymbol{\Omega}_{XY}$ encodes conditional cross-group dependence between $\mathbf{X}$ and $\mathbf{Y}$ after adjusting for all other variables.
+Thus, the off-diagonal block $\symbf{\Omega}_{XY}$ encodes conditional cross-group dependence between $\mathbf{X}$ and $\mathbf{Y}$ after adjusting for all other variables.
 
 This perspective is complementary to SCCA. Sparse CCA searches for sparse linear combinations of $\mathbf{X}$ and $\mathbf{Y}$ with high marginal correlation, while graphical-lasso-type methods identify sparse conditional dependence relationships among the individual variables. In other words, SCCA is association-oriented and low-dimensional, whereas graphical lasso is conditional-dependence-oriented and graph-structured. Both methods impose sparsity, but they regularize different objects: SCCA regularizes canonical loading vectors, while graphical lasso regularizes the precision matrix.
 
@@ -2431,16 +2284,16 @@ $$
 $$
 or equivalently maximizes covariance after normalizing by the within-set variances
 $$
-\mathbf{a}^{\top}\boldsymbol{\Sigma}_{XX}\mathbf{a}
+\mathbf{a}^{\top}\symbf{\Sigma}_{XX}\mathbf{a}
 =
 1,
 \qquad
-\mathbf{b}^{\top}\boldsymbol{\Sigma}_{YY}\mathbf{b}
+\mathbf{b}^{\top}\symbf{\Sigma}_{YY}\mathbf{b}
 =
 1.
 $$
 
-This distinction is important. Because PLS maximizes covariance rather than correlation, it is generally sensitive to the scaling of the original variables unless the variables are standardized beforehand. CCA, by contrast, is invariant to separate rescalings of the variables, provided the within-set covariance matrices are nonsingular. On the other hand, PLS avoids directly inverting $\widehat{\boldsymbol{\Sigma}}_{XX}$ and $\widehat{\boldsymbol{\Sigma}}_{YY}$, which can make it numerically more stable than classical CCA in high-dimensional or highly collinear settings.
+This distinction is important. Because PLS maximizes covariance rather than correlation, it is generally sensitive to the scaling of the original variables unless the variables are standardized beforehand. CCA, by contrast, is invariant to separate rescalings of the variables, provided the within-set covariance matrices are nonsingular. On the other hand, PLS avoids directly inverting $\widehat{\symbf{\Sigma}}_{XX}$ and $\widehat{\symbf{\Sigma}}_{YY}$, which can make it numerically more stable than classical CCA in high-dimensional or highly collinear settings.
 
 \newpage
 
@@ -2456,7 +2309,7 @@ Despite its usefulness, Sparse CCA still has several important limitations.
     $(\mathbf{a},\mathbf{b})$:
     $$
     \max_{\mathbf{a},\mathbf{b}} 
-    \mathbf{a}^{\top}\widehat{\boldsymbol{\Sigma}}_{XY}\mathbf{b}
+    \mathbf{a}^{\top}\widehat{\symbf{\Sigma}}_{XY}\mathbf{b}
     \quad
     \text{subject to sparsity and norm constraints.}
     $$
@@ -2553,42 +2406,20 @@ Several directions remain important for future work.
 
 ## Summary (Review Project)
 
-We have reviewed Sparse Canonical Correlation Analysis as introduced by Witten, Tibshirani, and Hastie (2009), with emphasis on its mathematical formulation, theoretical guarantees, and connections to related methods.
+We have reviewed Sparse Canonical Correlation Analysis (SCCA), with particular emphasis on the penalised matrix decomposition formulation of Witten, Tibshirani, and Hastie (2009), its algorithmic structure, its theoretical properties, and its relationship to other multivariate methods.
 
-**Key points:**
+The main points are as follows.
 
 \begin{enumerate}
-  \item \textbf{Formulation.} SCCA regularises the classical CCA problem by imposing $\ell_1$ constraints on the canonical coefficient vectors, yielding sparse solutions that are well-defined even when $p > n$. The PMD framework provides a unified algorithmic treatment via coordinate ascent with soft-thresholding updates.
+    \item \textbf{Formulation.} Classical CCA seeks linear combinations of two random vectors that are maximally correlated, but the sample version becomes unstable or ill-defined when the within-view covariance matrices are singular or poorly conditioned. SCCA addresses this problem by adding sparsity constraints or penalties to the canonical coefficient vectors. In the Witten--Tibshirani--Hastie formulation, this leads to the PMD($\ell_1,\ell_1$) problem, which is solved by alternating updates with soft-thresholding. The resulting canonical vectors are sparse and therefore more interpretable in high-dimensional settings.
 
-  \item \textbf{Theory.} Under sparsity assumptions on the true canonical vectors, SCCA achieves the minimax-optimal estimation rate $O(\sqrt{s \log p / n})$ in the $\ell_2$ norm. Variable selection consistency holds under additional irrepresentability and beta-min conditions.
+    \item \textbf{Theory.} The theoretical literature shows that sparsity is essential for consistent estimation in high-dimensional CCA. Under suitable structural and regularity assumptions on the population covariance matrices and the true canonical directions, sparse CCA estimators can consistently recover the leading canonical subspaces. Minimax results, such as those of Gao, Ma, and Zhou (2015), quantify the best possible estimation error over sparse parameter spaces, while variable-selection results, such as those of Mai and Zhang (2019), require additional signal-strength and design conditions. Thus, sparsity helps both statistically and interpretively, but the precise guarantee depends on the estimator, the loss function, and the assumptions imposed.
 
-  \item \textbf{Connections.} SCCA is related to sparse PCA (via the PMD framework with $\mathbf{Y} = \mathbf{X}$), reduced-rank regression (via the CCA-regression equivalence), the graphical lasso (via partial correlation structure), and PLS (via the distinction between correlation and covariance objectives).
+    \item \textbf{Connections.} SCCA is closely related to several other multivariate methods. It connects to sparse PCA through the PMD framework, since sparse PCA can be viewed as a one-view analogue of the same penalised low-rank decomposition idea. It is also related to reduced-rank regression through the classical connection between CCA and multivariate regression. Graphical-lasso methods are complementary rather than equivalent: they estimate sparse conditional-dependence structure through precision matrices, whereas SCCA estimates sparse cross-view linear associations. Finally, SCCA differs from partial least squares because CCA maximises correlation after within-view normalisation, whereas PLS maximises covariance and is therefore more sensitive to marginal scale.
 
-  \item \textbf{Limitations.} Key challenges include non-convexity of the objective, difficulty of tuning parameter selection, bias from sequential deflation, and the absence of computationally tractable inference procedures for individual coefficients.
+    \item \textbf{Limitations.} Despite its usefulness, SCCA has several limitations. The optimisation problem is generally non-convex, so the computed solution may depend on the algorithm and initialization. Tuning sparsity parameters is also difficult, especially when the goal is stable variable selection rather than merely high canonical correlation. Higher-order canonical pairs require deflation, but sequential deflation can introduce bias and make later components harder to interpret. Inference is another open challenge: valid confidence intervals or hypothesis tests for individual selected coefficients are difficult because selection, non-convexity, and high dimensionality interact.
 
-  \item \textbf{Connection to Part I.} The eleven-ETF analysis in Part I
-operated comfortably in the low-dimensional regime
-($p_1 + p_2 = 10 \ll n = 1{,}759$), where classical CCA is well-behaved
-and SCCA is unnecessary. The high-dimensional application section in
-Part I crosses the threshold by re-running the analysis at the
-individual-stock level ($p_1 = 67$ IT stocks, $p_2 = 55$ HC stocks).
-That application directly verifies three predictions of the theory
-reviewed above: (i) the Bai--Miao--Pan upward bias of $\hat{\rho}_1^*$
-under independence, observed empirically at $\approx 0.36$ versus the
-predicted $\approx 0.37$; (ii) the existence of an interpretable sparse
-solution at $(c_1, c_2) = (0.3, 0.3)$ that retains roughly $15\%$ of the
-candidate variables while preserving $99\%$ of the canonical correlation;
-and (iii) regime-conditional variable selection, with a small
-always-active core stable across pre- and post-COVID sub-periods
-alongside peripheral selections that rotate -- consistent with the
-irrepresentability/beta-min framework of Mai and Zhang (2019). The
-economic interpretation of the active set -- a B2B software /
-semiconductor design $\leftrightarrow$ medical-technology /
-lab-instruments linkage that the broad-market factor of the ETF-level
-analysis does not isolate -- is, in turn, exactly the kind of insight
-that motivates SCCA in its original genomics applications: a sparse
-cross-group structure hidden underneath a dense common-factor
-component.
+    \item \textbf{Connection to Part I.} The empirical analysis in Part I illustrates why SCCA is useful. At the sector-ETF level, the problem is low-dimensional, so classical CCA is numerically stable and already interpretable. At the individual-stock level, however, the IT--Health Care analysis has $p_1 = 67$ and $p_2 = 55$, so classical CCA is much more vulnerable to high-dimensional upward bias. The permutation null in Part I agrees closely with the Bai--Miao--Pan high-dimensional bias prediction, showing that a large sample canonical correlation can arise partly from dimensional effects. The sparse CCA fit at $(c_1,c_2)=(0.3,0.3)$ then produces a much smaller and more interpretable active set while preserving most of the leading canonical correlation. This empirical pattern is consistent with the main message of the review: sparsity is not only a computational device, but also a way to extract interpretable cross-view structure from high-dimensional data.
 \end{enumerate}
 
 \newpage
