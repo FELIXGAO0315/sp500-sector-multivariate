@@ -2306,25 +2306,141 @@ $n,p_1,p_2,s_1,s_2$, rather than only an asymptotic convergence statement.
 
 \textbf{Sparse PCA} (Zou, Hastie, and Tibshirani 2006) seeks sparse principal component loading vectors. The relationship to SCCA is direct: if one sets $\mathbf{Y} = \mathbf{X}$ in \eqref{eq:scca}, then $\mathbf{M} = \mathbf{X}^\top \mathbf{X}$ and the PMD problem reduces to finding sparse eigenvectors of the sample covariance matrix. This observation motivates a unified algorithmic framework for sparse matrix decompositions (Witten, Tibshirani, and Hastie 2009).
 
-Formally, the PMD($\ell_1$,$\ell_1$) applied to $\mathbf{M} = \mathbf{X}^\top\mathbf{X}$ yields loadings $\hat{\mathbf{v}}$ solving
+When $\mathbf{M}=\mathbf{X}^\top\mathbf{X}$ is symmetric and positive semidefinite, the PMD$(\ell_1,\ell_1)$ formulation is closely related to sparse PCA. In this setting, the bilinear objective
+
 $$
-\max_{\|\mathbf{v}\|_2 \leq 1,\, \|\mathbf{v}\|_1 \leq c} \mathbf{v}^\top \mathbf{X}^\top \mathbf{X} \mathbf{v},
+\max_{\|\mathbf{u}\|_2\leq 1,\ \|\mathbf{v}\|_2\leq 1,\ 
+      \|\mathbf{u}\|_1\leq c_1,\ \|\mathbf{v}\|_1\leq c_2}
+\mathbf{u}^\top \mathbf{X}^\top \mathbf{X}\mathbf{v}
 $$
-which is a relaxation of the NP-hard sparse eigenvector problem. The soft-thresholding update for SCCA translates into the same algorithm here, with $\mathbf{b}$ playing the role of $\mathbf{v}$.
+
+can be viewed as a sparse low-rank approximation to the covariance matrix. Under a symmetric loading interpretation, this leads to the sparse eigenvector-type problem
+
+$$
+\max_{\|\mathbf{v}\|_2 \leq 1,\ \|\mathbf{v}\|_1 \leq c}
+\mathbf{v}^\top \mathbf{X}^\top \mathbf{X}\mathbf{v},
+$$
+
+which is a convex-constraint relaxation of the sparse principal component problem. The same soft-thresholding updates used in SCCA therefore reappear in sparse PCA, with the left and right loading vectors corresponding to the same underlying sparse direction.
 
 ### Reduced-Rank Regression
 
-\textbf{Reduced-rank regression} (Izenman 1975; Reinsel and Velu 1998) models the coefficient matrix in the multivariate regression $\mathbf{Y} = \mathbf{X}\mathbf{B} + \mathbf{E}$ as rank-$r$: $\mathbf{B} = \mathbf{A}\mathbf{C}$ with $\mathbf{A} \in \mathbb{R}^{p_1 \times r}$ and $\mathbf{C} \in \mathbb{R}^{r \times p_2}$. The OLS estimator under the rank constraint is $\hat{\mathbf{B}} = \hat{\mathbf{B}}_{\text{OLS}}\mathbf{V}_r\mathbf{V}_r^\top$, where $\mathbf{V}_r$ consists of the top $r$ right-singular vectors of $\hat{\mathbf{B}}_{\text{OLS}}$. It can be shown that the population version of reduced-rank regression is equivalent to CCA: the canonical coefficient vectors are proportional to the regression coefficient vectors under appropriate normalisation (Anderson 1951).
+Reduced-rank regression (RRR; Anderson, 1951; Izenman, 1975; Reinsel and Velu, 1998) studies the multivariate regression model
+$$
+\mathbf{Y} = \mathbf{X}\mathbf{B} + \mathbf{E},
+$$
+where $\mathbf{Y}\in\mathbb{R}^{n\times p_2}$, $\mathbf{X}\in\mathbb{R}^{n\times p_1}$, and the coefficient matrix $\mathbf{B}\in\mathbb{R}^{p_1\times p_2}$ is constrained to have low rank:
+$$
+\operatorname{rank}(\mathbf{B}) \leq r.
+$$
+This rank constraint forces the fitted mean $\mathbb{E}(\mathbf{Y}\mid \mathbf{X})=\mathbf{X}\mathbf{B}$ to depend on $\mathbf{X}$ through only a small number of latent linear combinations. In this sense, RRR and CCA are closely related: both methods seek low-dimensional linear structure linking two sets of variables.
 
-Sparse reduced-rank regression (Chen and Huang 2012) imposes $\ell_1$ penalties on $\mathbf{A}$ or $\mathbf{C}$, yielding a sparse version that inherits the CCA connection. This provides another route to sparse canonical analyses within a regression framework.
+However, RRR is not identical to ordinary CCA. CCA is a symmetric association method: it finds linear combinations of $\mathbf{X}$ and $\mathbf{Y}$ with maximal correlation. In contrast, RRR is a conditional mean model for predicting $\mathbf{Y}$ from $\mathbf{X}$. Thus, the two methods answer different questions. CCA asks which directions in $\mathbf{X}$ and $\mathbf{Y}$ are most strongly associated, whereas RRR asks which low-dimensional subspace of predictors is most useful for explaining or predicting the response matrix.
+
+The connection between the two methods appears through generalized eigenvalue problems involving the covariance structure of $\mathbf{X}$ and $\mathbf{Y}$. At the population level, the multivariate least-squares coefficient is
+$$
+\mathbf{B}_{\mathrm{OLS}}
+=
+\boldsymbol{\Sigma}_{XX}^{-1}\boldsymbol{\Sigma}_{XY},
+$$
+assuming $\boldsymbol{\Sigma}_{XX}$ is nonsingular. RRR then replaces this full-rank coefficient matrix by a rank-$r$ approximation, but the approximation is taken with respect to the response covariance structure rather than by simply truncating the ordinary Euclidean singular value decomposition of $\mathbf{B}_{\mathrm{OLS}}$. Therefore, a formula such as
+$$
+\widehat{\mathbf{B}}
+=
+\widehat{\mathbf{B}}_{\mathrm{OLS}}\mathbf{V}_r\mathbf{V}_r^\top
+$$
+should be understood only as a schematic description, not as the general RRR estimator.
+
+A more precise way to state the relationship is that RRR can be expressed through canonical analysis of the fitted response space. The rank constraint selects a small number of response directions that are most predictable from $\mathbf{X}$, while CCA selects pairs of predictor and response directions that are maximally correlated after normalizing by the within-set covariance matrices. Hence, RRR is closely connected to CCA, but the canonical coefficient vectors are not, in general, simply proportional to the regression coefficient vectors.
+
+Sparse reduced-rank regression extends this idea by imposing sparsity on the coefficient structure in addition to the rank constraint. For example, Chen and Huang (2012) study sparse reduced-rank regression by combining low-rank structure with variable selection. This is conceptually parallel to SCCA: both methods seek interpretable low-dimensional relationships between two high-dimensional data matrices. The difference is that sparse RRR is prediction-oriented and asymmetric, whereas SCCA is association-oriented and symmetric.
 
 ### Graphical Lasso and Partial Correlations
 
-While CCA measures marginal associations between two groups, one might prefer partial correlations that control for other variables. The \textbf{graphical lasso} (Friedman, Hastie, and Tibshirani 2008) estimates a sparse precision matrix $\mathbf{\Omega} = \symbf{\Sigma}^{-1}$, whose off-diagonal entries encode partial correlation structure. The inter-group block $\mathbf{\Omega}_{12}$ encodes the partial correlations between $\mathbf{X}$ and $\mathbf{Y}$ after conditioning on all other variables. A joint sparse model on both $\symbf{\Sigma}_{11}^{-1}$, $\symbf{\Sigma}_{22}^{-1}$ and $\symbf{\Sigma}_{12}$ unifies the graphical lasso and SCCA perspectives (Rothman, Levina, and Zhu 2010).
+Graphical-lasso-type methods provide a conditional-dependence perspective on the relationship between two sets of variables. Let
+$$
+\mathbf{Z}
+=
+\begin{pmatrix}
+\mathbf{X} \\
+\mathbf{Y}
+\end{pmatrix},
+\qquad
+\boldsymbol{\Sigma}
+=
+\begin{pmatrix}
+\boldsymbol{\Sigma}_{XX} & \boldsymbol{\Sigma}_{XY} \\
+\boldsymbol{\Sigma}_{YX} & \boldsymbol{\Sigma}_{YY}
+\end{pmatrix},
+$$
+and let
+$$
+\boldsymbol{\Omega}
+=
+\boldsymbol{\Sigma}^{-1}
+=
+\begin{pmatrix}
+\boldsymbol{\Omega}_{XX} & \boldsymbol{\Omega}_{XY} \\
+\boldsymbol{\Omega}_{YX} & \boldsymbol{\Omega}_{YY}
+\end{pmatrix}
+$$
+denote the precision matrix of the joint vector
+$(\mathbf{X}^{\top},\mathbf{Y}^{\top})^{\top}$.
+
+Under a Gaussian graphical model, zeros in the precision matrix correspond to conditional independences between variables, conditional on all remaining variables. This idea goes back to covariance selection in Dempster (1972) and is treated systematically in Lauritzen (1996). The graphical lasso estimates a sparse precision matrix by solving the penalized likelihood problem
+$$
+\widehat{\boldsymbol{\Omega}}
+=
+\arg\max_{\boldsymbol{\Omega}\succ 0}
+\left\{
+\log\det(\boldsymbol{\Omega})
+-
+\operatorname{tr}(\widehat{\boldsymbol{\Sigma}}\boldsymbol{\Omega})
+-
+\lambda\|\boldsymbol{\Omega}\|_1
+\right\},
+$$
+where $\widehat{\boldsymbol{\Sigma}}$ is the sample covariance matrix and $\lambda>0$ controls the sparsity level; this formulation is commonly associated with the graphical lasso of Friedman, Hastie, and Tibshirani (2008). Equivalently, this estimator can be viewed as an $\ell_1$-regularized maximum-likelihood estimator for the inverse covariance matrix.
+
+The entries of the precision matrix are closely related to partial correlations, but they are not themselves partial correlations. For variables $i$ and $j$, the partial correlation after conditioning on all remaining variables is
+$$
+\rho_{ij\mid -ij}
+=
+-\frac{\Omega_{ij}}
+{\sqrt{\Omega_{ii}\Omega_{jj}}}.
+$$
+Thus, the off-diagonal block $\boldsymbol{\Omega}_{XY}$ encodes conditional cross-group dependence between $\mathbf{X}$ and $\mathbf{Y}$ after adjusting for all other variables.
+
+This perspective is complementary to SCCA. Sparse CCA searches for sparse linear combinations of $\mathbf{X}$ and $\mathbf{Y}$ with high marginal correlation, while graphical-lasso-type methods identify sparse conditional dependence relationships among the individual variables. In other words, SCCA is association-oriented and low-dimensional, whereas graphical lasso is conditional-dependence-oriented and graph-structured. Both methods impose sparsity, but they regularize different objects: SCCA regularizes canonical loading vectors, while graphical lasso regularizes the precision matrix.
 
 ### Partial Least Squares
 
-\textbf{Partial Least Squares} (PLS; Wold 1966) finds vectors $\mathbf{a}$ and $\mathbf{b}$ maximising $\text{Cov}(\mathbf{X}\mathbf{a}, \mathbf{Y}\mathbf{b})$ subject only to $\|\mathbf{a}\|_2 = \|\mathbf{b}\|_2 = 1$ (no normalisation by the covariance matrices). Comparing with CCA, which maximises the correlation, PLS can be more robust when variables have heterogeneous scales. The PMD framework of Witten et al. (2009) applies directly to PLS by choosing $\mathbf{M} = \mathbf{X}^\top \mathbf{Y}$ and imposing only $\ell_1$ constraints; in fact, problem \eqref{eq:scca} is more precisely a \emph{sparse PLS} than a true sparse CCA (since the $\ell_2$ normalisation uses the Euclidean norm rather than the data-adaptive CCA norm). This point is acknowledged by Witten et al. (2009) and has led to subsequent proposals for more faithful sparse CCA formulations (Chu et al. 2013; Gao et al. 2015).
+Partial least squares (PLS) is another method for finding low-dimensional relationships between two data matrices; see Rosipal and Krämer (2006) for an overview. Like CCA, PLS constructs linear combinations of two sets of variables, but the optimization criterion is different. PLS seeks directions $\mathbf{a}$ and $\mathbf{b}$ that maximize covariance,
+$$
+\operatorname{Cov}(\mathbf{X}\mathbf{a}, \mathbf{Y}\mathbf{b}),
+$$
+often under Euclidean norm constraints such as
+$$
+\|\mathbf{a}\|_2 \leq 1,
+\qquad
+\|\mathbf{b}\|_2 \leq 1.
+$$
+In contrast, classical CCA maximizes correlation,
+$$
+\operatorname{Corr}(\mathbf{X}\mathbf{a}, \mathbf{Y}\mathbf{b}),
+$$
+or equivalently maximizes covariance after normalizing by the within-set variances
+$$
+\mathbf{a}^{\top}\boldsymbol{\Sigma}_{XX}\mathbf{a}
+=
+1,
+\qquad
+\mathbf{b}^{\top}\boldsymbol{\Sigma}_{YY}\mathbf{b}
+=
+1.
+$$
+
+This distinction is important. Because PLS maximizes covariance rather than correlation, it is generally sensitive to the scaling of the original variables unless the variables are standardized beforehand. CCA, by contrast, is invariant to separate rescalings of the variables, provided the within-set covariance matrices are nonsingular. On the other hand, PLS avoids directly inverting $\widehat{\boldsymbol{\Sigma}}_{XX}$ and $\widehat{\boldsymbol{\Sigma}}_{YY}$, which can make it numerically more stable than classical CCA in high-dimensional or highly collinear settings.
 
 \newpage
 
@@ -2420,6 +2536,8 @@ Chu, D., Liao, L. Z., Ng, M. K., & Zhang, X. (2013). Sparse canonical correlatio
 
 Connor, G. and Korajczyk, R.A. (1988). Risk and return in an equilibrium APT: Application of a new test methodology. *Journal of Financial Economics*, 21(2), 255-289.
 
+Dempster, A. P. (1972). Covariance selection. *Biometrics*, 28(1), 157-175.
+
 Donoho, D.L. and Johnstone, I.M. (1994). Ideal spatial adaptation by wavelet shrinkage. *Biometrika*, 81(3), 425-455.
 
 Doz, C., Giannone, D. and Reichlin, L. (2011). A two-step estimator for large approximate dynamic factor models based on Kalman filtering. *Journal of Econometrics*, 164(1), 188-205.
@@ -2448,6 +2566,8 @@ Klami, A., Virtanen, S. and Kaski, S. (2013). Bayesian canonical correlation ana
 
 Laha, N., & Mukherjee, R. (2022). On support recovery with sparse cca: Information theoretic and computational limits. IEEE transactions on information theory, 69(3), 1695-1738.
 
+Lauritzen, S. L. (1996). *Graphical models (Vol. 17)*. Clarendon press.
+
 Ledermann, W. (1937). On the rank of the reduced correlational matrix in multiple-factor analysis. *Psychometrika*, 2(2), 85-93.
 
 Leurgans, S.E., Moyeed, R.A. and Silverman, B.W. (1993). Canonical correlation analysis when the data are curves. *Journal of the Royal Statistical Society: Series B*, 55(3), 725-740.
@@ -2457,6 +2577,8 @@ Ma, Z., Lu, Y. and Foster, D. (2015). Finding linear structure in large datasets
 Mai, Q. and Zhang, X. (2019). An iterative penalized least squares approach to sparse canonical correlation analysis. *Biometrics*, 75(3), 734-744.
 
 Reinsel, G.C. and Velu, R.P. (1998). *Multivariate Reduced-Rank Regression*. Springer.
+
+Rosipal and Krämer (2006), “Overview and Recent Advances in Partial Least Squares,” in *Subspace, Latent Structure and Feature Selection*, edited by Saunders, Grobelnik, Gunn, and Shawe-Taylor, Lecture Notes in Computer Science, volume 3940, pages 34–51, Springer.
 
 Ross, S.A. (1976). The arbitrage theory of capital asset pricing. *Journal of Economic Theory*, 13(3), 341-360.
 
