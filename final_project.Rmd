@@ -32,12 +32,15 @@ header-includes:
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(
-  echo    = TRUE,
-  warning = FALSE,
-  message = FALSE,
+  echo      = TRUE,
+  warning   = FALSE,
+  message   = FALSE,
   fig.align = "center",
   fig.pos   = "H",
-  cache   = FALSE
+  fig.width = 6.5,
+  fig.height = 4,
+  out.width = "0.95\\linewidth",
+  cache     = FALSE
 )
 ```
 
