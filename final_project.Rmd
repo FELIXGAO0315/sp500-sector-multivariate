@@ -2006,7 +2006,15 @@ but it does not induce sparsity.
 
 \textbf{(b) CCA with group sparsity.} When variables are naturally grouped (e.g., genes in pathways, voxels in brain regions), group lasso penalties $\sum_g \|\mathbf{a}_g\|_2 \leq c_1$ encourage entire groups to be selected or discarded simultaneously (Yuan and Lin 2006).
 
-\textbf{(c) Probabilistic SCCA.} Wang (2007) and Klami et al. (2013) formulate CCA as a latent variable model: $\mathbf{x}_i = \mathbf{W}_1 \mathbf{z}_i + \symbf{\epsilon}_i^{(1)}$, $\mathbf{y}_i = \mathbf{W}_2 \mathbf{z}_i + \symbf{\epsilon}_i^{(2)}$, where $\mathbf{z}_i$ is a shared latent factor. Sparsity is imposed via spike-and-slab priors on $\mathbf{W}_1$ and $\mathbf{W}_2$, enabling Bayesian variable selection and uncertainty quantification.
+\textbf{(c) Probabilistic SCCA.} Bach and Jordan (2005) formulate CCA as a latent-variable model:
+
+$$
+\mathbf{x}_i = \mathbf{W}_1 \mathbf{z}_i + \symbf{\epsilon}_i^{(1)}, 
+\qquad
+\mathbf{y}_i = \mathbf{W}_2 \mathbf{z}_i + \symbf{\epsilon}_i^{(2)},
+$$
+
+where $\mathbf{z}_i$ is a shared latent factor that explains the dependence between the two views. Bayesian extensions impose shrinkage or sparsity-inducing priors on the loading matrices $\mathbf{W}_1$ and $\mathbf{W}_2$, enabling variable selection and uncertainty quantification; examples include Wang (2007) and Klami et al. (2013).
 
 \textbf{(d) CCA via SVD regularisation.} Chen et al. (2013) propose to regularise the matrix $\hat{\symbf{\Sigma}}_{11}^{-1/2}\hat{\symbf{\Sigma}}_{12}\hat{\symbf{\Sigma}}_{22}^{-1/2}$ by truncated SVD, which shrinks small singular values to zero. This is related to but distinct from the Witten et al. approach.
 
@@ -2177,6 +2185,8 @@ Anderson, T.W. (1951). Estimating linear restrictions on regression coefficients
 
 Attié, A.P. and Roache, S.K. (2009). Inflation hedging for long-term investors. IMF Working Paper.
 
+Bach, F. R., & Jordan, M. I. (2005). A probabilistic interpretation of canonical correlation analysis.
+
 Bai, Z., Miao, B. and Pan, G. (1996). On asymptotics of eigenvectors of large sample covariance matrix. *Annals of Probability*, 35(4), 1532--1572.
 
 Bai, J. and Ng, S. (2002). Determining the number of factors in approximate factor models. *Econometrica*, 70(1), 191--221.
@@ -2244,6 +2254,8 @@ van de Geer, S., Bühlmann, P., Ritov, Y. and Dezeure, R. (2014). On asymptotica
 Vinod, H.D. (1976). Canonical ridge and econometrics of joint production. *Journal of Econometrics*, 4(2), 147--166.
 
 Wachter, K.W. (1980). The limiting empirical measure of multiple discriminant ratios. *Annals of Statistics*, 8(5), 937--957.
+
+Wang, C. (2007). Variational Bayesian approach to canonical correlation analysis. IEEE Transactions on Neural Networks, 18(3), 905-910.
 
 Witten, D.M., Tibshirani, R. and Hastie, T. (2009). A penalized matrix decomposition, with applications to sparse principal components and canonical correlation analysis. *Biostatistics*, 10(3), 515--534.
 
