@@ -2016,7 +2016,12 @@ $$
 
 where $\mathbf{z}_i$ is a shared latent factor that explains the dependence between the two views. Bayesian extensions impose shrinkage or sparsity-inducing priors on the loading matrices $\mathbf{W}_1$ and $\mathbf{W}_2$, enabling variable selection and uncertainty quantification; examples include Wang (2007) and Klami et al. (2013).
 
-\textbf{(d) CCA via SVD regularisation.} Chen et al. (2013) propose to regularise the matrix $\hat{\symbf{\Sigma}}_{11}^{-1/2}\hat{\symbf{\Sigma}}_{12}\hat{\symbf{\Sigma}}_{22}^{-1/2}$ by truncated SVD, which shrinks small singular values to zero. This is related to but distinct from the Witten et al. approach.
+\textbf{(d) Alternative optimisation formulations.}
+Chu et al. (2013) propose an alternative formulation of sparse CCA and develop
+an algorithm for estimating sparse canonical vectors. This line of work is related
+to, but distinct from, the penalised matrix decomposition approach of Witten et al.
+(2009), which applies $\ell_1$ constraints directly to the canonical coefficient
+vectors.
 
 ## Theoretical Properties
 
@@ -2198,6 +2203,8 @@ Carroll, J.D. (1968). A generalization of canonical correlation analysis to thre
 Chen, M. and Huang, J. (2012). Sparse reduced-rank regression for simultaneous dimension reduction and variable selection. *Journal of the American Statistical Association*, 107(500), 1533--1545.
 
 Chen, M. and Bickel, P.J. (2006). Efficient estimation of covariance and partial correlation based on Gaussian graphical models. *Annals of Statistics*, 34(6), 2662--2679.
+
+Chu, D., Liao, L. Z., Ng, M. K., & Zhang, X. (2013). Sparse canonical correlation analysis: New formulation and algorithm. IEEE transactions on pattern analysis and machine intelligence, 35(12), 3050-3065.
 
 Connor, G. and Korajczyk, R.A. (1988). Risk and return in an equilibrium APT: Application of a new test methodology. *Journal of Financial Economics*, 21(2), 255--289.
 
