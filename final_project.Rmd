@@ -5,16 +5,12 @@ title: |
 author: "Yuan Gao, Tingzhou Wei, Yijie Huang"
 date: "`r format(Sys.Date(), '%B %d, %Y')`"
 output:
-  html_document:
+  pdf_document:
     toc: true
-    toc_depth: '3'
-    df_print: paged
-  # pdf_document:
-  #   toc: true
-  #   toc_depth: 3
-  #   number_sections: true
-  #   fig_caption: true
-  #   latex_engine: xelatex
+    toc_depth: 3
+    number_sections: true
+    fig_caption: true
+    latex_engine: xelatex
 subtitle: STAT Final Project
 header-includes:
   - \usepackage{amsmath}
@@ -1873,10 +1869,11 @@ $a_j > 0$ requires $c_j > \nu$ and $\mu a_j = c_j - \nu$;
 $a_j < 0$ requires $c_j < -\nu$ and $\mu a_j = c_j + \nu$;
 $a_j = 0$ requires $|c_j| \le \nu$. The three cases combine into the
 single soft-thresholding identity
-$$
+
+\begin{equation}
 \mu\,a_j \;=\; \mathrm{sign}(c_j)\max(|c_j| - \nu,\, 0) \;=\; S(c_j,\nu),
 \qquad j = 1,\ldots,p_1. \tag{$\star$}
-$$
+\end{equation}
 
 Since $\mathbf{c} \ne \mathbf{0}$ and any $\mathbf{a}$ with $\mathbf{a}^\top
 \mathbf{c} > 0$ is improved by scaling toward $\|\mathbf{a}\|_2 = 1$, the
@@ -1972,7 +1969,7 @@ bilinear, hence non-convex in $(\mathbf{a}, \mathbf{b})$ jointly, and
 saddle points or local maxima are possible. In practice one runs the
 algorithm from several random initialisations of $\mathbf{b}^{(0)}$ and
 retains the iterate achieving the largest $F^*$.
-\end{remark>
+\end{remark}
 
 ### Higher-Order Canonical Pairs
 
