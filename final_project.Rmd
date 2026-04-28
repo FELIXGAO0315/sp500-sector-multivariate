@@ -910,7 +910,7 @@ pair captures their differential loading on F3.
 
 \newpage
 
-## Canonical Correlation Analysis
+## Canonical Correlation Analysis\label{cca-data-analysis}
 
 ### Motivation
 
@@ -1732,7 +1732,7 @@ formal inference and is left to future work.
 
 ### Limitations of Classical CCA in High Dimensions
 
-Classical CCA, as described in Section 5, finds pairs of linear combinations of two sets of variables that are maximally correlated. While powerful in moderate dimensions, it fails catastrophically when the number of variables $p = p_1 + p_2$ is comparable to or larger than the sample size $n$. Formally, when $p_1 > n$ or $p_2 > n$, the sample covariance matrices $\hat{\symbf{\Sigma}}_{11}$ and $\hat{\symbf{\Sigma}}_{22}$ are rank-deficient and thus not invertible. Even when $p < n$, if $p/n$ is not negligible, the sample canonical correlations are severely upward-biased estimators of the population canonical correlations (Bai, Miao, and Pan 1996; Wachter 1980).
+Classical CCA, as described in Section \ref{cca-data-analysis}, finds pairs of linear combinations of two sets of variables that are maximally correlated. While powerful in moderate dimensions, it fails catastrophically when the number of variables $p = p_1 + p_2$ is comparable to or larger than the sample size $n$. Formally, when $p_1 > n$ or $p_2 > n$, the sample covariance matrices $\hat{\symbf{\Sigma}}_{11}$ and $\hat{\symbf{\Sigma}}_{22}$ are rank-deficient and thus not invertible. Even when $p < n$, if $p/n$ is not negligible, the sample canonical correlations are severely upward-biased estimators of the population canonical correlations (Bai, Miao, and Pan 1996; Wachter 1980).
 
 To see the severity of the problem, note that in the null case where $\mathbf{X}$ and $\mathbf{Y}$ are independent, the sample canonical correlations concentrate near
 $$
@@ -2413,7 +2413,7 @@ The main points are as follows.
 \begin{enumerate}
     \item \textbf{Formulation.} Classical CCA seeks linear combinations of two random vectors that are maximally correlated, but the sample version becomes unstable or ill-defined when the within-view covariance matrices are singular or poorly conditioned. SCCA addresses this problem by adding sparsity constraints or penalties to the canonical coefficient vectors. In the Witten--Tibshirani--Hastie formulation, this leads to the PMD($\ell_1,\ell_1$) problem, which is solved by alternating updates with soft-thresholding. The resulting canonical vectors are sparse and therefore more interpretable in high-dimensional settings.
 
-    \item \textbf{Theory.} The theoretical literature shows that sparsity is essential for consistent estimation in high-dimensional CCA. Under suitable structural and regularity assumptions on the population covariance matrices and the true canonical directions, sparse CCA estimators can consistently recover the leading canonical subspaces. Minimax results, such as those of Gao, Ma, and Zhou (2015), quantify the best possible estimation error over sparse parameter spaces, while variable-selection results, such as those of Mai and Zhang (2019), require additional signal-strength and design conditions. Thus, sparsity helps both statistically and interpretively, but the precise guarantee depends on the estimator, the loss function, and the assumptions imposed.
+    \item \textbf{Theory.} The theoretical literature shows that sparsity is essential for consistent estimation in high-dimensional CCA. Under suitable structural and regularity assumptions on the population covariance matrices and the true canonical directions, sparse CCA estimators can consistently recover the leading canonical subspaces. Minimax results, such as those of Gao, Ma, Ren and Zhou (2015), quantify the best possible estimation error over sparse parameter spaces, while variable-selection results, such as those of Laha and Mukherjee (2022), require additional signal-strength and design conditions. Thus, sparsity helps both statistically and interpretively, but the precise guarantee depends on the estimator, the loss function, and the assumptions imposed.
 
     \item \textbf{Connections.} SCCA is closely related to several other multivariate methods. It connects to sparse PCA through the PMD framework, since sparse PCA can be viewed as a one-view analogue of the same penalised low-rank decomposition idea. It is also related to reduced-rank regression through the classical connection between CCA and multivariate regression. Graphical-lasso methods are complementary rather than equivalent: they estimate sparse conditional-dependence structure through precision matrices, whereas SCCA estimates sparse cross-view linear associations. Finally, SCCA differs from partial least squares because CCA maximises correlation after within-view normalisation, whereas PLS maximises covariance and is therefore more sensitive to marginal scale.
 
